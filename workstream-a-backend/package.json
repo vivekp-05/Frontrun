@@ -1,0 +1,19 @@
+{
+  "name": "@frontrun/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workstream A — Lead persistence, state machine, status API, Hydra analytics.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch server.ts",
+    "start": "tsx server.ts",
+    "db:init": "tsx initInsforge.ts",
+    "db:init:seed": "tsx initInsforge.ts --seed",
+    "test": "tsx store.test.ts",
+    "typecheck": "tsc --noEmit -p .."
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0"
+  }
+}
