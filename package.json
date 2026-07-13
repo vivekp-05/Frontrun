@@ -10,9 +10,12 @@
     "workstream-d-outreach"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:d": "tsx workstream-d-outreach/triage.test.ts && tsx workstream-d-outreach/send.test.ts && tsx workstream-d-outreach/webhooks.test.ts"
   },
   "devDependencies": {
+    "@types/node": "^22.5.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.5.4"
   }
 }
