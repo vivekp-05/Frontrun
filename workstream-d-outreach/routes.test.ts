@@ -138,6 +138,34 @@ async function main() {
     check("calcom tampered: lead unchanged (still GREEN)", (await store.getLead("lead_demo_1"))?.status === LeadStatus.GREEN)
   }
 
+  // 6b) Resend inbound is metadata-only → body is fetched, then triaged.
+  {
+    const store = new MemStore()
+    await store.upsertLead(leadAt(LeadStatus.DELIVERED))
+    let fetchedId = ""
+    const fetchInbound = async (emailId: string) => {
+      fetchedId = emailId
+      return { text: "Yes, let's talk — when are you free this week?", from: "alex@northwindrobotics.com" }
+    }
+    const route = createResendRoute(
+      { store, triageOpts: { mock: true }, fetchInbound },
+      { secret: RESEND_SECRET },
+    )
+    // email.received payload carries NO body (just metadata), like real Resend.
+    const body = JSON.stringify({
+      type: "email.received",
+      data: { email_id: "em_test_1", to: "dana+lead_demo_1@vivek-patel.xyz", from: "alex@northwindrobotics.com", subject: "Re: hi" },
+    })
+    const res = await route(req(body, signResend(body)))
+    const out = await res.json()
+    check("inbound fetch: 200", res.status === 200, String(res.status))
+    check("inbound fetch: body fetched by id", fetchedId === "em_test_1", fetchedId)
+    check("inbound fetch: triaged green (from fetched body)", out.classification === "green", out.classification)
+    const l = await store.getLead("lead_demo_1")
+    check("inbound fetch: lead FOLLOW_UP_DRAFTED", l?.status === LeadStatus.FOLLOW_UP_DRAFTED, l?.status)
+    check("inbound fetch: raw reply text = fetched body", (l?.replies?.[0]?.rawText ?? "").includes("let's talk"))
+  }
+
   // 7) Dev bypass — no secret configured → verification passes.
   {
     const store = new MemStore()

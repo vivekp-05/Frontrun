@@ -211,7 +211,7 @@ Prospect company: ${company}
 Prospect contact: ${contact}
 Our sender: ${options.fromName} at ${options.fromCompany}
 Our original outreach subject: "${originalSubject}"
-Booking link to use for green replies: ${options.calLink}
+Booking link to use for green replies (use EXACTLY as-is): ${bookingLinkFor(lead, options.calLink)}
 
 THE PROSPECT'S REPLY (from ${reply.from}):
 """
@@ -458,6 +458,30 @@ function summarize(raw: string): string {
 // Draft templates (shared by mock + LLM-fallback synthesis)
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-lead Cal.com booking link. Appends `metadata[leadId]` (→ surfaces in the
+ * BOOKING_CREATED webhook's `payload.metadata.leadId` for deterministic mapping)
+ * plus prefilled `email`/`name` (robust fallback: our resolveBookingLeadId also
+ * maps by attendee email, covering Cal.com's occasional metadata drop).
+ */
+export function bookingLinkFor(lead: Lead, baseLink: string): string {
+  const email = lead.contact?.email
+  const name = lead.contact?.name
+  try {
+    const url = new URL(baseLink)
+    url.searchParams.set("metadata[leadId]", lead.id)
+    if (email) url.searchParams.set("email", email)
+    if (name) url.searchParams.set("name", name)
+    return url.toString()
+  } catch {
+    // Non-absolute base — best-effort query append.
+    const q = new URLSearchParams({ "metadata[leadId]": lead.id })
+    if (email) q.set("email", email)
+    if (name) q.set("name", name)
+    return `${baseLink}${baseLink.includes("?") ? "&" : "?"}${q.toString()}`
+  }
+}
+
 function defaultSubject(c: ReplyClassification, input: TriageInput): string {
   const base = input.lead.draft?.subject
   const re = base ? `Re: ${base.replace(/^re:\s*/i, "")}` : "Re: quick intro"
@@ -471,6 +495,7 @@ function templateDraft(
   const { lead, options } = input
   const contactFirst = (lead.contact?.name ?? "there").split(" ")[0]
   const subject = defaultSubject(classification, input)
+  const link = bookingLinkFor(lead, options.calLink)
   let body: string
 
   if (classification === "green") {
@@ -478,7 +503,7 @@ function templateDraft(
 
 Great to hear from you — glad this landed at the right time. The quickest next step is a 20-minute call so I can share how we help teams staff up fast after a raise.
 
-Grab whatever works here: ${options.calLink}
+Grab whatever works here: ${link}
 
 Talk soon,
 ${options.fromName}
@@ -489,7 +514,7 @@ ${options.fromCompany}`
 
 Fair question. I'm ${options.fromName} with ${options.fromCompany} — we help newly funded teams hire quickly, and I reached out because it looked like you may be scaling up soon.
 
-Happy to send a short overview, or if it's easier, here's my calendar for a quick chat: ${options.calLink}
+Happy to send a short overview, or if it's easier, here's my calendar for a quick chat: ${link}
 
 Either way, no pressure at all.
 

@@ -42,6 +42,7 @@ import type { EmailDraft, Lead, ReplyClassification } from "@shared/types"
 import {
   chatComplete,
   triage,
+  bookingLinkFor,
   __internals,
   mockAgent,
   type ChatMessage,
@@ -432,7 +433,7 @@ Prospect company: ${company}
 Prospect contact: ${contact}
 Our sender: ${options.fromName} at ${options.fromCompany}
 Our original outreach subject: "${originalSubject}"
-Booking link (use for green): ${options.calLink}
+Booking link (use for green, EXACTLY as-is): ${bookingLinkFor(lead, options.calLink)}
 
 Summary of their reply: ${shared.summary ?? "(none)"}
 Classification: ${shared.classification}

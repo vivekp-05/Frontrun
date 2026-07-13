@@ -28,7 +28,8 @@ import type {
   StoreProvider,
 } from "@shared/types"
 import { LeadStatus } from "@shared/types"
-import { triage as defaultTriage, type TriageOptions } from "./triage"
+import type { TriageOptions } from "./triage"
+import { bandTriageRunner } from "./band"
 
 // ---------------------------------------------------------------------------
 // Deps + result
@@ -40,11 +41,35 @@ export type TriageRunner = (
   opts?: TriageOptions,
 ) => Promise<ReplyEvent>
 
+/**
+ * Default reply-triage = the Band-coordinated agent (Summarizer → Classifier →
+ * Drafter). It's always safe as a default: when Band isn't configured it runs the
+ * in-process local coordinator, and any reasoning failure degrades to the
+ * deterministic mock (triage() catches it). Override per-call with WebhookDeps.triage
+ * — e.g. to attach an onCoordination sink for the activity feed.
+ */
+const defaultTriage: TriageRunner = bandTriageRunner()
+
+/**
+ * Fetch the full inbound email body by id. Resend's `email.received` webhook
+ * carries only metadata (no body/text), so the reply loop must pull the body
+ * from the Received-emails API before triage. Injectable for tests; the default
+ * (Resend-backed) is wired in by `createResendRoute` / `createResendInboundFetcher`.
+ */
+export type InboundFetcher = (emailId: string) => Promise<{
+  text?: string
+  html?: string
+  from?: string
+  subject?: string
+} | null>
+
 export interface WebhookDeps {
   store: StoreProvider
-  /** Injectable so tests can stub the LLM. Defaults to the real triage(). */
+  /** Injectable so tests can stub the LLM. Defaults to the Band-coordinated triage. */
   triage?: TriageRunner
   triageOpts?: TriageOptions
+  /** Fetch the inbound body when the webhook payload omits it (Resend inbound). */
+  fetchInbound?: InboundFetcher
   now?: () => string
 }
 
@@ -193,12 +218,23 @@ async function onInboundReply(
     })
   }
 
+  // Resend's email.received carries only metadata — no body. When there's no
+  // inline text, fetch the full email via the Received-emails API so triage sees
+  // the actual reply (not just the subject). Falls back to the payload if we can't.
+  let src = data
+  const emailId = data?.email_id ?? data?.id
+  const hasInlineBody = Boolean(data?.text || data?.body?.text || data?.html)
+  if (!hasInlineBody && emailId && deps.fetchInbound) {
+    const full = await deps.fetchInbound(String(emailId))
+    if (full) src = { ...data, ...full } // fetched text/html/from/subject win
+  }
+
   // Record the raw inbound reply before triage (honesty: real text, kept).
   const rawReply: ReplyEvent = {
-    id: String(data?.email_id ?? data?.id ?? `reply_${Date.now()}`),
+    id: String(emailId ?? `reply_${Date.now()}`),
     receivedAt: iso(deps),
-    from: extractFromEmail(data) ?? "unknown",
-    rawText: extractReplyText(data),
+    from: extractFromEmail(src) ?? "unknown",
+    rawText: extractReplyText(src),
   }
   // Idempotency: a replayed webhook (same event id) must not duplicate the reply.
   if ((lead.replies ?? []).some((r) => r.id === rawReply.id)) {
@@ -215,8 +251,8 @@ async function onInboundReply(
     return { ok: true, action: "reply:duplicate", leadId, status: lead.status }
   }
 
-  // --- Triage ---
-  const runTriage = deps.triage ?? (defaultTriage as TriageRunner)
+  // --- Triage (Band-coordinated by default) ---
+  const runTriage = deps.triage ?? defaultTriage
   const triaged = await runTriage(rawReply, lead, deps.triageOpts)
 
   // Persist the enriched reply (summary/classification/nextStepDraft).

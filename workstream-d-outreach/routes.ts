@@ -32,6 +32,7 @@ import {
   verifyResendSignature,
   type SigResult,
 } from "./signatures"
+import { createResendInboundFetcher } from "./send"
 
 export interface RouteOptions {
   /** Signing secret. Defaults to the provider's env var. */
@@ -84,11 +85,15 @@ export function createResendRoute(
   opts: RouteOptions = {},
 ): FetchRoute {
   const secret = opts.secret ?? env("RESEND_WEBHOOK_SECRET")
+  // Default the inbound body-fetcher from RESEND_API_KEY so real replies (which
+  // arrive as metadata-only email.received events) get their body pulled + triaged.
+  const fetchInbound = deps.fetchInbound ?? createResendInboundFetcher()
+  const withFetch: WebhookDeps = { ...deps, fetchInbound }
   return (req) =>
     runRoute(
       req,
       (raw, headers) => verifyResendSignature(raw, headers, secret),
-      (payload) => handleResendWebhook(payload, deps),
+      (payload) => handleResendWebhook(payload, withFetch),
     )
 }
 

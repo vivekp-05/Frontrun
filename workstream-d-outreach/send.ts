@@ -19,6 +19,7 @@
  */
 
 import { LeadStatus, type Lead, type OutreachStatus, type SendProvider, type StoreProvider } from "@shared/types"
+import type { InboundFetcher } from "./webhooks"
 
 // ---------------------------------------------------------------------------
 // Options
@@ -28,8 +29,14 @@ export interface SendOptions {
   /** Force the deterministic path. Auto-on when no Resend key is available. */
   mock?: boolean
   apiKey?: string
-  /** Verified sender on the Resend domain. Replies must route back here. */
+  /** Verified sender on the Resend domain (branded From). */
   fromEmail?: string
+  /**
+   * Base address replies route to (plus-addressed per lead). Defaults to
+   * `fromEmail`. Set to the Resend managed inbox (`x@<id>.resend.app`) when the
+   * From domain's MX can't point at Resend (e.g. root already used by iCloud).
+   */
+  replyToEmail?: string
   /** Display name shown in the From header. */
   fromName?: string
   /** Resend API base (override for tests). */
@@ -42,6 +49,7 @@ interface ResolvedSendOptions {
   mock: boolean
   apiKey?: string
   fromEmail: string
+  replyToEmail: string
   fromName: string
   apiBase: string
   fetchImpl: typeof fetch
@@ -56,10 +64,13 @@ function resolveOptions(opts: SendOptions = {}): ResolvedSendOptions {
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as typeof fetch)
   const forceMock = opts.mock ?? env("MOCK_SEND") === "1"
   const canLive = Boolean(apiKey && fetchImpl)
+  const fromEmail = opts.fromEmail ?? env("RESEND_FROM_EMAIL") ?? "dana@frontrun.dev"
   return {
     mock: forceMock === true ? true : !canLive,
     apiKey,
-    fromEmail: opts.fromEmail ?? env("RESEND_FROM_EMAIL") ?? "dana@frontrun.dev",
+    fromEmail,
+    // Replies route here (plus-addressed per lead). Falls back to From.
+    replyToEmail: opts.replyToEmail ?? env("RESEND_REPLY_TO") ?? fromEmail,
     fromName: opts.fromName ?? env("FROM_NAME") ?? "Dana",
     apiBase: opts.apiBase ?? "https://api.resend.com",
     fetchImpl,
@@ -132,6 +143,38 @@ export function createSendProvider(opts: SendOptions = {}): SendProvider {
 /** Convenience: send one lead with ad-hoc options. */
 export function send(lead: Lead, opts: SendOptions = {}): Promise<OutreachStatus> {
   return createSendProvider(opts).send(lead)
+}
+
+/**
+ * Default `InboundFetcher`: pull a received email's body from Resend's
+ * Received-emails API (`GET /emails/receiving/:id`) — the `email.received`
+ * webhook itself carries only metadata. Returns `undefined` when no key is
+ * configured (so the webhook simply triages whatever inline text it has).
+ */
+export function createResendInboundFetcher(
+  opts: { apiKey?: string; apiBase?: string; fetchImpl?: typeof fetch } = {},
+): InboundFetcher | undefined {
+  const apiKey = opts.apiKey ?? env("RESEND_API_KEY")
+  const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as typeof fetch)
+  const apiBase = opts.apiBase ?? "https://api.resend.com"
+  if (!apiKey || !fetchImpl) return undefined
+  return async (emailId: string) => {
+    try {
+      const res = await fetchImpl(`${apiBase}/emails/receiving/${emailId}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (!res.ok) return null
+      const d: any = await res.json()
+      return {
+        text: d?.text ?? undefined,
+        html: d?.html ?? undefined,
+        from: d?.from,
+        subject: d?.subject,
+      }
+    } catch {
+      return null
+    }
+  }
 }
 
 /**
@@ -215,7 +258,9 @@ async function resendSend(
       from: `${options.fromName} <${options.fromEmail}>`,
       to: [to],
       // Prospect replies here → inbound webhook reads the lead id off the address.
-      reply_to: replyToFor(options.fromEmail, lead.id),
+      // Uses replyToEmail (may be the Resend managed inbox) so replies reach Resend
+      // even when the From domain's MX points elsewhere.
+      reply_to: replyToFor(options.replyToEmail, lead.id),
       subject,
       text: body,
       html: toHtml(body),

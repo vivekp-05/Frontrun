@@ -243,8 +243,10 @@ Stored in `.env.local` (gitignored, never commit). **Set:** `INSFORGE_PROJECT_UR
    Triage runs as a real Band-coordinated Summarizer→Classifier→Drafter task (3 registered
    agents, one room per reply, @mention handoffs), gateway underneath, wired via
    `bandTriageRunner()` → `WebhookDeps.triage`, local fallback intact. Agents provisioned
-   via `band.provision.mjs`; keys in `.env.local`. **Remaining:** flip the webhook's default
-   `triage` to `bandTriageRunner()` at integration (kept plain until then per fallback rule).
+   via `band.provision.mjs`; keys in `.env.local`. **Band is now the webhook DEFAULT**
+   triage (`webhooks.ts` → `defaultTriage = bandTriageRunner()`) — degrades to the local
+   coordinator without keys and to the mock on any error. Override via `WebhookDeps.triage`
+   (e.g. to attach an `onCoordination` sink for the activity feed).
 2. ~~**Thin route adapters.**~~ ✅ **DONE** — `routes.ts` + `signatures.ts`.
    `createResendRoute(deps)` / `createCalcomRoute(deps)` return Web-standard
    `(Request)=>Response` handlers (drop into Next.js `app/api/webhooks/{resend,calcom}/
@@ -252,12 +254,30 @@ Stored in `.env.local` (gitignored, never commit). **Set:** `INSFORGE_PROJECT_UR
    Cal.com=HMAC) over the raw body → parse → dispatch → 200/400/401/500. Dev-bypass
    when no secret set. Covered by `routes.test.ts` (in `test:d`). **Remaining:** C/A
    create the two `route.ts` files wiring in A's store + `bandTriageRunner()`.
-3. **Resend domain + inbound MX** (external, blocking for real replies). Set
-   `RESEND_FROM_EMAIL`; confirm inbound routing delivers `email.received`.
+3. **Resend domain + inbound** — ✅ LIVE-verified (2026-07-13):
+   - Sending: `vivek-patel.xyz` verified; `RESEND_FROM_EMAIL=dana@vivek-patel.xyz`.
+   - **Inbound via Resend's managed inbox** (`untuemei.resend.app`) — the free plan allows
+     only 1 domain and the root MX is used by iCloud, so a custom receiving subdomain wasn't
+     viable. Managed inbox needs **zero DNS** and leaves iCloud untouched.
+   - From stays branded; **Reply-To = `RESEND_REPLY_TO` (`dana@untuemei.resend.app`)**,
+     plus-addressed per lead (`dana+<leadId>@untuemei.resend.app`). The plus-address is
+     preserved in the received `to`, so lead-mapping works.
+   - `email.received` is metadata-only → `onInboundReply` fetches the body via
+     `GET /emails/receiving/{id}` behind `WebhookDeps.fetchInbound`
+     (`createResendInboundFetcher`, auto-wired in `createResendRoute`).
+   - **Verified live** (`inbound.live.ts`): sent → managed inbox received → metadata webhook →
+     live body fetch → triage → `FOLLOW_UP_DRAFTED`.
+   - **Only remaining:** a public URL for `/api/webhooks/resend` (= the app deploy), then Resend
+     dashboard → Webhooks → add it, select `email.received` + delivery events, copy the signing
+     secret → `RESEND_WEBHOOK_SECRET`. No DNS work outstanding.
 4. **Swap `MemStore` → A's InsForge store**; smoke-test one lead through the full
    loop on a real machine.
-5. **Cal.com booking link** with `metadata.leadId` so bookings map deterministically
-   (from-email fallback already works).
+5. ~~**Cal.com booking link** with `metadata.leadId`.~~ ✅ **DONE** — `bookingLinkFor(lead, base)`
+   (triage.ts) appends `metadata[leadId]` (→ `payload.metadata.leadId` in BOOKING_CREATED)
+   plus prefilled `email`/`name`; wired into every draft (mock, gateway, Band). Webhook maps
+   via `metadata.leadId` then attendee-email fallback. **Remaining:** set `CALCOM_LINK` to your
+   real Cal.com event + `CALCOM_WEBHOOK_SECRET`, and add the webhook in the Cal.com dashboard
+   → the deployed `/api/webhooks/calcom` URL.
 6. **Delete the mock paths** for the graded demo per honesty rules (keep them behind
    the env flag until the real path is proven).
 

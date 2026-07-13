@@ -10,7 +10,7 @@
  * Exits non-zero on any failure so it can gate CI / the typecheck step.
  */
 
-import { triage, type InboundReply } from "./triage"
+import { triage, bookingLinkFor, type InboundReply } from "./triage"
 import { LeadStatus, type Lead } from "@shared/types"
 
 // --- Fixtures ---------------------------------------------------------------
@@ -113,6 +113,19 @@ async function main() {
       )
     }
   }
+
+  // --- Booking link carries the lead id (deterministic BOOKING_CREATED mapping) ---
+  const link = bookingLinkFor(lead, "https://cal.com/vivek/intro")
+  const linkOk =
+    link.includes("metadata") && link.includes(lead.id) && link.includes("northwindrobotics.com")
+  if (!linkOk) failures++
+  console.log(`\n${linkOk ? "PASS" : "FAIL"} · booking link embeds leadId + prefilled email`)
+  console.log(`  link: ${link}`)
+
+  const greenEv = await triage(reply("yes, let's talk"), lead, { mock: true })
+  const draftHasId = Boolean(greenEv.nextStepDraft?.body.includes(lead.id))
+  if (!draftHasId) failures++
+  console.log(`${draftHasId ? "PASS" : "FAIL"} · green draft links to per-lead booking url`)
 
   console.log(
     `\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`} · ${CASES.length} cases`,
