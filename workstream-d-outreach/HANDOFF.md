@@ -243,8 +243,10 @@ Stored in `.env.local` (gitignored, never commit). **Set:** `INSFORGE_PROJECT_UR
    Triage runs as a real Band-coordinated Summarizer→Classifier→Drafter task (3 registered
    agents, one room per reply, @mention handoffs), gateway underneath, wired via
    `bandTriageRunner()` → `WebhookDeps.triage`, local fallback intact. Agents provisioned
-   via `band.provision.mjs`; keys in `.env.local`. **Remaining:** flip the webhook's default
-   `triage` to `bandTriageRunner()` at integration (kept plain until then per fallback rule).
+   via `band.provision.mjs`; keys in `.env.local`. **Band is now the webhook DEFAULT**
+   triage (`webhooks.ts` → `defaultTriage = bandTriageRunner()`) — degrades to the local
+   coordinator without keys and to the mock on any error. Override via `WebhookDeps.triage`
+   (e.g. to attach an `onCoordination` sink for the activity feed).
 2. ~~**Thin route adapters.**~~ ✅ **DONE** — `routes.ts` + `signatures.ts`.
    `createResendRoute(deps)` / `createCalcomRoute(deps)` return Web-standard
    `(Request)=>Response` handlers (drop into Next.js `app/api/webhooks/{resend,calcom}/

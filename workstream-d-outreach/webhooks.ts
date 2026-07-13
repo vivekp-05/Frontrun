@@ -28,7 +28,8 @@ import type {
   StoreProvider,
 } from "@shared/types"
 import { LeadStatus } from "@shared/types"
-import { triage as defaultTriage, type TriageOptions } from "./triage"
+import type { TriageOptions } from "./triage"
+import { bandTriageRunner } from "./band"
 
 // ---------------------------------------------------------------------------
 // Deps + result
@@ -39,6 +40,15 @@ export type TriageRunner = (
   lead: Lead,
   opts?: TriageOptions,
 ) => Promise<ReplyEvent>
+
+/**
+ * Default reply-triage = the Band-coordinated agent (Summarizer → Classifier →
+ * Drafter). It's always safe as a default: when Band isn't configured it runs the
+ * in-process local coordinator, and any reasoning failure degrades to the
+ * deterministic mock (triage() catches it). Override per-call with WebhookDeps.triage
+ * — e.g. to attach an onCoordination sink for the activity feed.
+ */
+const defaultTriage: TriageRunner = bandTriageRunner()
 
 /**
  * Fetch the full inbound email body by id. Resend's `email.received` webhook
@@ -55,7 +65,7 @@ export type InboundFetcher = (emailId: string) => Promise<{
 
 export interface WebhookDeps {
   store: StoreProvider
-  /** Injectable so tests can stub the LLM. Defaults to the real triage(). */
+  /** Injectable so tests can stub the LLM. Defaults to the Band-coordinated triage. */
   triage?: TriageRunner
   triageOpts?: TriageOptions
   /** Fetch the inbound body when the webhook payload omits it (Resend inbound). */
@@ -225,8 +235,8 @@ async function onInboundReply(
     return { ok: true, action: "reply:duplicate", leadId, status: lead.status }
   }
 
-  // --- Triage ---
-  const runTriage = deps.triage ?? (defaultTriage as TriageRunner)
+  // --- Triage (Band-coordinated by default) ---
+  const runTriage = deps.triage ?? defaultTriage
   const triaged = await runTriage(rawReply, lead, deps.triageOpts)
 
   // Persist the enriched reply (summary/classification/nextStepDraft).
