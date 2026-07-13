@@ -80,11 +80,25 @@ DETECTED is never clobbered (the run returns it with a `resumed` step).
 
 ## RocketRide
 
-Start RocketRide locally, then run:
+The outreach-**draft** step runs as a native RocketRide Cloud pipeline
+(`frontrun.pipe`): `webhook → agent_rocketride (+ llm + memory) → response_answers`.
+Enrich/verify stay in the TS pipeline (HTTP/API calls); RocketRide orchestrates
+the drafting agent. Verified live against `https://api.rocketride.ai` — the `rr_`
+key connects, `validate()` passes, and the pipe deploys.
 
 ```bash
-pip install -r workstream-b-pipeline/requirements.txt
-npm run track-b:rocketride
+cd workstream-b-pipeline && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# from repo root, with ROCKETRIDE_AUTH (rr_ key) + ROCKETRIDE_URI set in .env.local:
+set -a; source .env.local; set +a
+ROCKETRIDE_OPENAI_KEY=sk-... npm run track-b:rocketride
 ```
 
-`rocketride_client.py` registers `workstream-b-pipeline/pipeline.json`, sends a JSON payload into RocketRide, and prints the token, response, and task status. The pipeline entrypoint points back to `npm run track-b:run -- --json-stdin`, so RocketRide invokes the same verified Track B implementation.
+`rocketride_client.py` connects with `ROCKETRIDE_AUTH`, validates `frontrun.pipe`,
+deploys it, sends a lead summary, and prints `{ connected, validated, token,
+llm_key_present, draft }`.
+
+> **BYOK inference.** The `rr_` key authenticates orchestration only. The agent's
+> LLM node needs one provider key — `ROCKETRIDE_OPENAI_KEY` (an `sk-...` key), or
+> `ROCKETRIDE_ANTHROPIC_KEY` / `ROCKETRIDE_GEMINI_KEY`. Without it the pipeline
+> connects, validates, and deploys but the agent emits no draft text; the runner
+> says so explicitly rather than failing silently.
