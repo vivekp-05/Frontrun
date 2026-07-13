@@ -91,7 +91,7 @@ async function main() {
   ok("rowToLead: null jsonb columns → undefined", back.brief === undefined && back.outreach === undefined);
   // some drivers return jsonb as a string — mapper must parse both
   const back2 = rowToLead({ ...row, signal: JSON.stringify(sample.signal), replies: JSON.stringify([]) });
-  ok("rowToLead parses stringified jsonb", back2.signal.companyName === sample.signal.companyName && back2.replies.length === 0);
+  ok("rowToLead parses stringified jsonb", back2.signal.companyName === sample.signal.companyName && back2.replies?.length === 0);
 
   const params = leadToParams(sample);
   ok("leadToParams: 12 ordered params, id first, is_demo boolean",

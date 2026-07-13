@@ -1,4 +1,4 @@
-import { createInsForgeStore } from "../workstream-a-backend/store"
+import { createStore } from "../workstream-a-backend/store"
 import { readPipelineEnv } from "./env"
 import { runRocketRidePipeline } from "./rocketride"
 
@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   const stdinArgs = args.jsonStdin ? await readJsonStdin() : {}
   const input = { ...args, ...stdinArgs }
   const env = readPipelineEnv()
-  const store = input.persist ? createInsForgeStore() : undefined
+  const store = input.persist ? createStore() : undefined
   const result = await runRocketRidePipeline(
     {
       domain: input.domain,

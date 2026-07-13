@@ -129,6 +129,8 @@ interface FrontrunState {
   lastChangedId: string | null
   lastChangedAt: number | null
   running: boolean
+  /** True once real leads have been loaded from the backend (/api/leads). */
+  live: boolean
 
   /** Parallel-outreach demo state. */
   outreachActive: boolean
@@ -140,6 +142,8 @@ interface FrontrunState {
   tick: () => void
   startSimulation: (intervalMs?: number) => void
   stopSimulation: () => void
+  /** Load real leads from A's backend. Returns true if any came back (→ go live). */
+  hydrateFromBackend: () => Promise<boolean>
   runOutreachDemo: () => void
   reset: () => void
 }
@@ -153,6 +157,7 @@ export const useFrontrunStore = create<FrontrunState>((set, get) => ({
   lastChangedId: null,
   lastChangedAt: null,
   running: false,
+  live: false,
   outreachActive: false,
   demoLockUntil: 0,
 
@@ -247,7 +252,35 @@ export const useFrontrunStore = create<FrontrunState>((set, get) => ({
     set({ running: false })
   },
 
+  hydrateFromBackend: async () => {
+    try {
+      const res = await fetch("/api/leads", { cache: "no-store" })
+      if (!res.ok) return false
+      const data = (await res.json()) as { leads?: Lead[] }
+      const leads = Array.isArray(data.leads) ? data.leads : []
+      if (leads.length === 0) return false
+      set({
+        leads,
+        live: true,
+        detectedToday: leads.length,
+        lastChangedAt: Date.now(),
+      })
+      return true
+    } catch {
+      return false
+    }
+  },
+
   runOutreachDemo: () => {
+    // Live backend: trigger the real outreach send, then refresh from the store.
+    if (get().live) {
+      set({ outreachActive: true })
+      fetch("/api/outreach", { method: "POST" })
+        .then(() => get().hydrateFromBackend())
+        .catch(() => {})
+        .finally(() => set({ outreachActive: false }))
+      return
+    }
     if (get().outreachActive) return
     // Fixed filing order → stable verdict assignment (green / yellow / red).
     const demoIds = MOCK_LEADS.filter((l) => l.isDemo).map((l) => l.id)

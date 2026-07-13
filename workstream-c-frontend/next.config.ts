@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname, ".."),
   },
+  // The API routes import backend (A) + outreach (D) source TS from sibling
+  // workstream dirs; allow compiling TS from outside the Next app root.
+  experimental: {
+    externalDir: true,
+  },
 }
 
 export default nextConfig

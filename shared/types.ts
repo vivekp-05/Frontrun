@@ -97,6 +97,15 @@ export interface EmailDraft {
   createdAt: string // ISO 8601
 }
 
+/** Lead prioritization score (workstream B · RocketRide pipeline). */
+export interface LeadScore {
+  /** 0–100 recruiting-agency fit. */
+  score: number
+  tier: "hot" | "warm" | "cold"
+  reasons: string[]
+  createdAt: string // ISO 8601
+}
+
 /** An inbound reply + its triage (workstream D). */
 export interface ReplyEvent {
   id: string
@@ -137,6 +146,9 @@ export interface Lead {
 
   // --- Draft (B / D) ---
   draft?: EmailDraft
+
+  // --- Prioritization (B) ---
+  leadScore?: LeadScore
 
   // --- Outreach + reply loop (D) ---
   outreach?: OutreachStatus
