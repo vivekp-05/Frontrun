@@ -174,6 +174,9 @@ export async function triage(
     summary: result.summary,
     classification: result.classification,
     nextStepDraft: result.nextStepDraft,
+    // Honesty markers (PRD §10): persisted so C can show llm/mock provenance + why.
+    via: result.via,
+    reasoning: result.reasoning,
   }
 }
 
