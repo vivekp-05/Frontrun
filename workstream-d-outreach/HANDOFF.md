@@ -47,10 +47,34 @@ Band** (must be load-bearing in the triage step) + the reply-loop "wow."
 | 3 demo companies | `seed.ts` | ✅ built |
 | In-memory StoreProvider stand-in | `store.mock.ts` | ✅ built |
 | Full-loop integration test | `webhooks.test.ts` | ✅ green |
-| **Band orchestration wrapper** | — | ⏳ not started (prize) |
-| **Real integration** (A store, B drafts, Resend domain, routes) | — | ⏳ pending others |
+| **Band orchestration wrapper** | `band.ts` | ✅ built + LIVE-verified (prize) |
+| Band test suite | `band.test.ts` | ✅ green (added to `test:d`) |
+| **Webhook route adapters + sig verify** | `routes.ts` / `signatures.ts` | ✅ built + tested |
+| Route/signature test suite | `routes.test.ts` | ✅ green (added to `test:d`) |
+| **Real integration** (A store, B drafts, Resend domain, mount routes) | — | ⏳ pending others |
 
-Committed on branch `workstream-d-outreach` (`c8c5891`). Not yet pushed.
+`npm run test:d` is now 4 suites (triage + send + webhooks + band). Committed on
+branch `workstream-d-outreach` (`c8c5891`); Band work not yet committed.
+
+> **Band is LIVE-verified** (2026-07-13, account `in.vivekpatel`, Free tier). The
+> real Agent API is baked into `band.ts` and confirmed end-to-end via `band.ts`
+> itself (`band.live.ts`): a real Band room is created, the 3 registered agents
+> coordinate (summarize→classify→draft), `via: "band"`.
+>
+> Key facts learned live (differ from the docs' first impression):
+> - Base `https://app.band.ai/api/v1`; auth header **`X-API-Key`** (not Bearer);
+>   responses nested under `.data`.
+> - The provided key is a **human/user key** — it can't create rooms on Free
+>   (Human API is Enterprise-gated, 403). So each triage specialist is a **registered
+>   external agent** with its own agent key; coordination runs entirely on the
+>   **Agent API**, which works on Free.
+> - **Chat Tasks (Beta) 404 on Free** — the task board is opt-in (`BAND_TASKS=1`);
+>   the coordination + audit trail live in the room messages, which is enough.
+> - Agents are provisioned once by **`band.provision.mjs`** (registers the 3 agents,
+>   writes `BAND_AGENT_*_{ID,HANDLE,KEY}` into `.env.local`). Idempotent.
+>
+> Without the agent keys in `.env.local`, `band.ts` runs the in-process
+> `LocalBandOrchestrator` (fully demoable, `via: "local"`).
 
 ---
 
@@ -96,6 +120,22 @@ All files under `workstream-d-outreach/`. Imports use the `@shared/*` path alias
 - `TriageLLM` interface = the swappable seam. **This is where Band plugs in.**
 - Mock path = keyword classifier; opt-out signals beat incidental "yes".
 - Draft logic: green → booking nudge (+Cal link); yellow → clarifier; red → none.
+- Now also exposes `chatComplete()` (shared raw gateway call) and `TriageOptions.llm`
+  (inject a custom agent — how `band.ts` plugs in).
+
+### `band.ts` — Band-orchestrated triage (the Band prize)
+- `createBandTriageAgent(opts?) → TriageLLM` — makes Band **load-bearing** by running
+  triage as a coordinated 3-agent task: **Summarizer → Classifier → Drafter**, threading
+  context between them (vs. `gatewayAgent`'s single monolithic call). Model reasoning per
+  turn still runs through the InsForge gateway (`chatComplete`) underneath.
+- `bandTriageRunner(opts?) → TriageRunner` — drop-in for `WebhookDeps.triage`.
+- Two transports behind a `BandClient` seam: `HttpBandClient` (Band Chat Tasks REST API,
+  used when `BAND_API_KEY` set — prize path, wire shape provisional) and
+  `LocalBandOrchestrator` (in-process coordinator + transcript — PRD §14 fallback).
+- Emits a `BandCoordination` transcript (chatId/taskId/via/turns) via the optional
+  `onCoordination` callback — for the activity feed / "watch it coordinate" demo drawer.
+- **Resilience:** reasoning always runs (gateway/mock); Band posting is best-effort;
+  Band unreachable → local downgrade (honest `via: "local"`); hard failure → triage()'s mock.
 
 ### `send.ts` — outreach send (Resend)
 - `runOutreach(leads, store, opts?)` — **the "Run outreach" button entry point.**
@@ -199,14 +239,19 @@ Stored in `.env.local` (gitignored, never commit). **Set:** `INSFORGE_PROJECT_UR
 
 ## 11. What's next (prioritized roadmap)
 
-1. **Band wrapper around `TriageLLM`** (prize). Confirm Band's MCP/API at kickoff.
-   Implement a `TriageLLM` whose `classifyAndDraft` runs the summarize→classify→
-   draft as a Band-orchestrated agent step, calling the gateway underneath. Wire
-   via `WebhookDeps.triage`. Fallback stays the plain path (lose only the prize).
-2. **Thin route adapters.** Mount `handleResendWebhook` and `handleCalcomWebhook`
-   as `POST` routes (Next.js `app/api/webhooks/{resend,calcom}/route.ts` or
-   InsForge edge functions). Add signature verification (Resend = Svix headers;
-   Cal.com = HMAC with `CALCOM_WEBHOOK_SECRET`).
+1. ~~**Band wrapper around `TriageLLM`** (prize).~~ ✅ **DONE + LIVE-verified** — `band.ts`.
+   Triage runs as a real Band-coordinated Summarizer→Classifier→Drafter task (3 registered
+   agents, one room per reply, @mention handoffs), gateway underneath, wired via
+   `bandTriageRunner()` → `WebhookDeps.triage`, local fallback intact. Agents provisioned
+   via `band.provision.mjs`; keys in `.env.local`. **Remaining:** flip the webhook's default
+   `triage` to `bandTriageRunner()` at integration (kept plain until then per fallback rule).
+2. ~~**Thin route adapters.**~~ ✅ **DONE** — `routes.ts` + `signatures.ts`.
+   `createResendRoute(deps)` / `createCalcomRoute(deps)` return Web-standard
+   `(Request)=>Response` handlers (drop into Next.js `app/api/webhooks/{resend,calcom}/
+   route.ts` with `export const runtime = "nodejs"`). Verify signature (Resend=Svix,
+   Cal.com=HMAC) over the raw body → parse → dispatch → 200/400/401/500. Dev-bypass
+   when no secret set. Covered by `routes.test.ts` (in `test:d`). **Remaining:** C/A
+   create the two `route.ts` files wiring in A's store + `bandTriageRunner()`.
 3. **Resend domain + inbound MX** (external, blocking for real replies). Set
    `RESEND_FROM_EMAIL`; confirm inbound routing delivers `email.received`.
 4. **Swap `MemStore` → A's InsForge store**; smoke-test one lead through the full

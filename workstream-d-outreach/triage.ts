@@ -14,8 +14,12 @@
  *   - MOCK path: a deterministic keyword classifier so the whole loop is testable
  *     with zero keys and the sandbox (which can't reach InsForge) stays green.
  *
- * Real LLM path = InsForge Model Gateway (OpenAI-compatible, routes via OpenRouter):
- *   POST {INSFORGE_PROJECT_URL}/v1/chat/completions   Bearer {INSFORGE_API_KEY}
+ * Real LLM path = InsForge AI Gateway (routes via OpenRouter). VERIFIED live 2026-07:
+ *   POST {INSFORGE_PROJECT_URL}/api/ai/chat/completion   Bearer {INSFORGE_API_KEY}
+ *   body {model, messages, ...}  ->  response { text, metadata:{model,usage} }
+ * NOTE: not raw-OpenAI — content is `data.text` (not choices[]), and JSON mode is
+ * best-effort (the model may fence ```json); parseModelJson() tolerates both.
+ * Valid models: anthropic/claude-haiku-4.5, anthropic/claude-sonnet-4, openai/gpt-4o-mini.
  */
 
 import type {
@@ -63,6 +67,12 @@ export interface TriageOptions {
   fromCompany?: string
   /** Injectable for tests. Defaults to global fetch. */
   fetchImpl?: typeof fetch
+  /**
+   * Custom triage agent (the swappable LLM seam). When set, `triage()` uses it
+   * instead of the built-in gateway/mock agents — this is how the Band-orchestrated
+   * agent (band.ts) plugs in. Any error still degrades to the deterministic mock.
+   */
+  llm?: TriageLLM
 }
 
 /** The swappable LLM seam. Band wraps this; the plain orchestrator calls it raw. */
@@ -100,7 +110,7 @@ function resolveOptions(opts: TriageOptions = {}): ResolvedOptions {
   const gatewayUrl =
     opts.gatewayUrl ??
     (env("INSFORGE_PROJECT_URL")
-      ? `${env("INSFORGE_PROJECT_URL")!.replace(/\/+$/, "")}/v1`
+      ? env("INSFORGE_PROJECT_URL")!.replace(/\/+$/, "")
       : undefined)
   const apiKey = opts.apiKey ?? env("INSFORGE_API_KEY")
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as typeof fetch)
@@ -115,7 +125,7 @@ function resolveOptions(opts: TriageOptions = {}): ResolvedOptions {
     mock,
     gatewayUrl,
     apiKey,
-    model: opts.model ?? env("TRIAGE_MODEL") ?? "anthropic/claude-3.5-sonnet",
+    model: opts.model ?? env("TRIAGE_MODEL") ?? "anthropic/claude-haiku-4.5",
     calLink: opts.calLink ?? env("CALCOM_LINK") ?? "https://cal.com/frontrun/intro",
     fromName: opts.fromName ?? env("FROM_NAME") ?? "Dana",
     fromCompany: opts.fromCompany ?? env("FROM_COMPANY") ?? "Frontrun Talent",
@@ -138,9 +148,10 @@ export async function triage(
   opts: TriageOptions = {},
 ): Promise<ReplyEvent> {
   const options = resolveOptions(opts)
-  const agent: TriageLLM = options.mock
-    ? mockAgent
-    : gatewayAgent
+  // A custom agent (e.g. the Band-orchestrated one) takes precedence; it decides
+  // internally how to run under mock. Otherwise pick gateway (live) or mock.
+  const agent: TriageLLM =
+    opts.llm ?? (options.mock ? mockAgent : gatewayAgent)
 
   let result: TriageResult
   try {
@@ -216,9 +227,66 @@ Return JSON with this exact shape:
 }`
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   role: "system" | "user" | "assistant"
   content: string
+}
+
+/** What `chatComplete` needs — a structural subset of `ResolvedOptions`. */
+export interface GatewayCall {
+  gatewayUrl?: string
+  apiKey?: string
+  model: string
+  fetchImpl: typeof fetch
+  /** Completion route appended to gatewayUrl. Default = InsForge AI Gateway. */
+  completionPath?: string
+}
+
+const DEFAULT_COMPLETION_PATH = "/api/ai/chat/completion"
+
+/**
+ * One raw chat-completion call against the InsForge AI Gateway. Shared by the
+ * built-in `gatewayAgent` and the Band-orchestrated per-step calls (band.ts), so
+ * both hit the model the exact same way. Returns the assistant message content.
+ * `jsonMode` defaults on (sends response_format; the gateway tolerates but does
+ * not enforce it — callers parse defensively). Pass false for free text.
+ * Response content is read from `data.text` (InsForge shape) with an OpenAI-shape
+ * fallback so a swapped OpenAI-compatible gateway still works.
+ */
+export async function chatComplete(
+  messages: ChatMessage[],
+  o: GatewayCall,
+  opts: { temperature?: number; jsonMode?: boolean } = {},
+): Promise<string> {
+  const url = `${o.gatewayUrl}${o.completionPath ?? DEFAULT_COMPLETION_PATH}`
+  const res = await o.fetchImpl(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${o.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: o.model,
+      messages,
+      temperature: opts.temperature ?? 0.3,
+      ...(opts.jsonMode === false
+        ? {}
+        : { response_format: { type: "json_object" } }),
+    }),
+  })
+
+  if (!res.ok) {
+    throw new Error(`gateway ${res.status}: ${await safeText(res)}`)
+  }
+
+  const data: any = await res.json()
+  // InsForge returns { text }; keep an OpenAI-shape fallback for portability.
+  return (
+    data?.text ??
+    data?.choices?.[0]?.message?.content ??
+    data?.message?.content ??
+    ""
+  )
 }
 
 const gatewayAgent: TriageLLM = {
@@ -228,30 +296,7 @@ const gatewayAgent: TriageLLM = {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: buildUserPrompt(input) },
     ]
-
-    const res = await options.fetchImpl(
-      `${options.gatewayUrl}/chat/completions`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${options.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: options.model,
-          messages,
-          temperature: 0.3,
-          response_format: { type: "json_object" },
-        }),
-      },
-    )
-
-    if (!res.ok) {
-      throw new Error(`gateway ${res.status}: ${await safeText(res)}`)
-    }
-
-    const data: any = await res.json()
-    const content: string = data?.choices?.[0]?.message?.content ?? ""
+    const content = await chatComplete(messages, options)
     const parsed = parseModelJson(content)
     return normalizeResult(parsed, input, "llm")
   },
@@ -462,4 +507,6 @@ export const __internals = {
   coerceClassification,
   templateDraft,
   summarize,
+  parseModelJson,
+  defaultSubject,
 }
