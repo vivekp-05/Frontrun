@@ -42,23 +42,13 @@ export function Close() {
       </div>
 
       <footer className="border-t border-line">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-8">
-          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-              FrontRun · Build Your Own AI Company
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-              US B2B only · CAN-SPAM · demo inboxes, no cold sends
-            </span>
-          </div>
-          <div className="flex flex-col items-start justify-between gap-2 border-t border-line pt-4 sm:flex-row sm:items-center">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-subtle">
-              Built by Sharique Khatri &amp; Vivek Patel
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
-              © 2026 FrontRun. All rights reserved.
-            </span>
-          </div>
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-2 px-6 py-8 sm:flex-row sm:items-center">
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-subtle">
+            Built by Sharique Khatri &amp; Vivek Patel
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-fg-faint">
+            © 2026 FrontRun. All rights reserved.
+          </span>
         </div>
       </footer>
     </section>

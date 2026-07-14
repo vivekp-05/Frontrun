@@ -122,10 +122,16 @@ export function Hero() {
             className="mt-8 max-w-lg text-base leading-relaxed text-fg-muted md:text-lg"
             {...enter(0.18)}
           >
-            Ten agencies find out from the press release. You find out from
-            the filing. FrontRun detects the raise, researches it, and lands a
-            personalized email <span className="text-fg">the same day</span> —
-            before the competition knows the company exists.
+            10 agencies find out from the press release. You find out from{" "}
+            <span className="font-semibold text-fg underline decoration-signal/50 underline-offset-[3px]">
+              the filing
+            </span>
+            . FrontRun detects the raise, researches it, and lands a personalized
+            email{" "}
+            <span className="font-semibold text-fg underline decoration-signal/50 underline-offset-[3px]">
+              the same day
+            </span>{" "}
+            — before the competition knows the company exists.
           </motion.p>
 
           <motion.div className="mt-10 flex flex-wrap items-center gap-4" {...enter(0.28)}>
