@@ -63,3 +63,7 @@ coverage/
 # Python venvs (Track B RocketRide runner)
 .rr-venv/
 workstream-b-pipeline/.venv/
+
+# Vercel + all env files (protect tokens/secrets)
+.vercel
+.env*
