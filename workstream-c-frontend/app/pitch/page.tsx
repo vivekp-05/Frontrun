@@ -1,5 +1,4 @@
 import type { Metadata } from "next"
-import { ScrollProgress } from "@/components/landing/scroll-progress"
 import { Hero } from "@/components/landing/hero"
 import { Problem } from "@/components/landing/problem"
 import { HowItRuns } from "@/components/landing/how-it-runs"
@@ -14,7 +13,6 @@ export const metadata: Metadata = {
 export default function PitchPage() {
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <ScrollProgress />
       <Hero />
       <Problem />
       <HowItRuns />

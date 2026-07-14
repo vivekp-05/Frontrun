@@ -20,7 +20,7 @@ const BELT: Sponsor[] = [
 export function SponsorMarquee() {
   return (
     <div
-      className="belt group relative"
+      className="belt group relative overflow-hidden"
       style={{
         maskImage:
           "linear-gradient(to right, transparent, black 12%, black 88%, transparent)",

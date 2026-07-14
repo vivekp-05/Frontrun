@@ -200,18 +200,16 @@ export function HowItRuns() {
               Every state persists to <span className="text-fg">InsForge</span> · one guarded state machine
             </span>
             <span className="hidden h-3 w-px bg-line sm:inline-block" />
-            {(
-              [
-                ["bg-success", "green → book"],
-                ["bg-warning", "yellow → clarify"],
-                ["bg-danger", "red → stop"],
-              ] as const
-            ).map(([dot, label]) => (
-              <span key={label} className="flex items-center gap-2">
-                <span aria-hidden className={`size-2 rounded-full ${dot}`} />
-                <span className="font-mono text-[11px] tracking-[0.06em] text-fg-subtle">{label}</span>
-              </span>
-            ))}
+            {(["green → book", "yellow → clarify", "red → stop"] as const).map(
+              (label) => (
+                <span
+                  key={label}
+                  className="font-mono text-[11px] tracking-[0.06em] text-fg-subtle"
+                >
+                  {label}
+                </span>
+              ),
+            )}
           </div>
         </Reveal>
       </div>

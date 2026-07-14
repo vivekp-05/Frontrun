@@ -64,12 +64,6 @@ export function SignalOrb({
           />
         </motion.div>
       )}
-
-      {/* core glow */}
-      <div
-        className="absolute left-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-signal"
-        style={{ boxShadow: "0 0 24px 4px color-mix(in oklab, var(--signal) 70%, transparent)" }}
-      />
     </div>
   )
 }
