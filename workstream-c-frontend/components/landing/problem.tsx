@@ -13,7 +13,7 @@ const TIMELINE = [
   },
   {
     day: "Day 9",
-    event: "The press release drops. Ten agencies send the same template.",
+    event: "The press release drops. 10 agencies send the same template.",
     tone: "muted" as const,
   },
   {
@@ -36,7 +36,7 @@ export function Problem() {
           </h2>
           <p className="mt-6 max-w-md leading-relaxed text-fg-muted">
             A company that just raised a Series A will hire 20–50 people next
-            quarter — and ten recruiting agencies race to the same door.
+            quarter — and 10 recruiting agencies race to the same door.
             Whoever reaches out first wins the placements.
           </p>
           <p className="mt-4 max-w-md leading-relaxed text-fg-muted">
