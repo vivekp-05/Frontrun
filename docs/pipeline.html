@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Frontrun — Pipeline</title>
+<style>
+  :root{
+    --bg:#0a0b0e; --panel:#131519; --panel2:#171a20; --line:#262a31; --line2:#343a45;
+    --fg:#eceef2; --muted:#99a1ac; --faint:#626b77;
+    --signal:#3ecf8e; --signaldim:rgba(62,207,142,.13);
+    --amber:#f2b545; --red:#f0706e; --blue:#6ea8fe; --violet:#a98bff;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:radial-gradient(1200px 600px at 50% -10%,#12161d 0%,var(--bg) 55%);
+    color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;padding:48px 32px 64px;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+  .kicker{font:600 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  h1{font-size:30px;font-weight:600;letter-spacing:-.02em;margin:10px 0 6px}
+  h1 .dot{color:var(--signal)}
+  .sub{color:var(--muted);max-width:680px;margin:0}
+  .lanelabel{display:flex;align-items:center;gap:10px;margin:34px 0 16px}
+  .lanelabel .n{font:600 12px/1 var(--mono);color:var(--faint)}
+  .lanelabel h2{font-size:15px;font-weight:600;margin:0;letter-spacing:.01em}
+  .lanelabel .tag{margin-left:auto;font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 10px}
+
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+  .node{flex:1 1 0;min-width:170px;background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-radius:14px;padding:15px 15px 14px;position:relative;overflow:hidden}
+  .node::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--edge,var(--line2))}
+  .node .step{font:600 10px/1 var(--mono);color:var(--faint);letter-spacing:.1em}
+  .node h3{font-size:15px;margin:9px 0 3px;font-weight:600}
+  .node p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.45}
+  .chip{display:inline-flex;align-items:center;gap:6px;margin-top:11px;font:600 10.5px/1 var(--mono);
+    letter-spacing:.04em;color:var(--fg);background:var(--chipbg,rgba(255,255,255,.04));
+    border:1px solid var(--line2);border-radius:999px;padding:6px 9px}
+  .chip .d{width:6px;height:6px;border-radius:50%;background:var(--signal);box-shadow:0 0 8px var(--signal)}
+  .live{margin-top:9px;font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--signal)}
+  .live.warn{color:var(--amber)}
+  .arrow{flex:0 0 34px;display:flex;align-items:center;justify-content:center;color:var(--line2);font-size:20px}
+  @media(max-width:820px){.arrow{flex-basis:100%;height:22px;transform:rotate(90deg)}}
+
+  .foundation{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .found{background:linear-gradient(180deg,#101820,#0d1319);border:1px solid var(--line);
+    border-radius:14px;padding:15px}
+  .found .chip{--chipbg:rgba(110,168,254,.10)}
+  .found .chip .d{background:var(--blue);box-shadow:0 0 8px var(--blue)}
+  .found h3{margin:0 0 4px;font-size:14px}
+  .found p{margin:0;color:var(--muted);font-size:12.5px}
+
+  .ribbon{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:14px}
+  .st{font:600 10.5px/1 var(--mono);letter-spacing:.06em;padding:7px 9px;border-radius:7px;
+    border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+  .st.g{color:var(--signal);border-color:rgba(62,207,142,.4)}
+  .st.y{color:var(--amber);border-color:rgba(242,181,69,.4)}
+  .st.r{color:var(--red);border-color:rgba(240,112,110,.4)}
+  .st.b{color:var(--fg);border-color:var(--line2);background:var(--panel2)}
+  .sep{color:var(--faint)}
+
+  .data{display:flex;flex-wrap:wrap;align-items:center;gap:0;margin-top:14px}
+  .dbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;flex:1 1 0;min-width:150px}
+  .dbox .t{font:600 12.5px/1.3;margin-bottom:3px}
+  .dbox .s{font:500 11px/1.4 var(--mono);color:var(--faint)}
+  .dbox.src{border-color:rgba(62,207,142,.35)}
+  .dbox.db{border-color:rgba(110,168,254,.35)}
+
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+  footer .honesty{color:var(--muted);font-size:12.5px;max-width:640px}
+  footer .honesty b{color:var(--fg);font-weight:600}
+  footer a{color:var(--signal);text-decoration:none;font:600 12px/1 var(--mono)}
+  .legend{display:flex;gap:16px;margin-top:16px;color:var(--faint);font:600 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:7px;height:7px;border-radius:50%;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">Build Your Own AI Company · Autonomous SDR</div>
+  <h1>Frontrun<span class="dot">.</span> — the pipeline</h1>
+  <p class="sub">Detects the moment a company raises, researches it, finds the founder, drafts outreach,
+  sends it, then runs the entire reply conversation — triage, follow-up, booking — as an AI employee.</p>
+
+  <!-- LANE 1 -->
+  <div class="lanelabel">
+    <span class="n">A</span><h2>Signal &amp; Enrichment</h2>
+    <span class="tag">Workstream B · run on real SEC data</span>
+  </div>
+  <div class="flow">
+    <div class="node" style="--edge:var(--signal)">
+      <div class="step">01 · DETECT</div><h3>Form D filing</h3>
+      <p>SEC EDGAR full-text, same-day. Real filings, real raise amounts.</p>
+      <span class="chip"><span class="d"></span>SEC EDGAR</span>
+      <div class="live">● live signal</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="step">02 · RESEARCH</div><h3>Cited brief</h3>
+      <p>Confirms the raise and profiles the company with citations.</p>
+      <span class="chip"><span class="d"></span>You.com</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="step">03 · ENRICH</div><h3>Founder + email</h3>
+      <p>Resolves the contact and verifies the email (confidence-tiered).</p>
+      <span class="chip"><span class="d"></span>Nimble · Hunter · Reoon</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node" style="--edge:var(--violet)">
+      <div class="step">04 · DRAFT</div><h3>Personalized email</h3>
+      <p>enrich → verify → draft, packaged as one pipeline tool.</p>
+      <span class="chip"><span class="d"></span>RocketRide</span>
+    </div>
+  </div>
+
+  <!-- LANE 2 -->
+  <div class="lanelabel">
+    <span class="n">B</span><h2>Outreach &amp; Reply Loop</h2>
+    <span class="tag">Workstream D · the AI-employee loop</span>
+  </div>
+  <div class="flow">
+    <div class="node">
+      <div class="step">05 · SEND</div><h3>Sent → Delivered</h3>
+      <p>Verified domain. Sends route only to controlled demo inboxes.</p>
+      <span class="chip"><span class="d"></span>Resend</span>
+      <div class="live warn">● controlled inboxes</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node" style="--edge:var(--signal)">
+      <div class="step">06 · REPLY TRIAGE</div><h3>Green / Yellow / Red</h3>
+      <p>3 coordinated agents — Summarizer → Classifier → Drafter — decide the next step.</p>
+      <span class="chip"><span class="d"></span>Band · multi-agent</span>
+      <div class="live">● live agents</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="step">07 · FOLLOW-UP</div><h3>Next-step drafted</h3>
+      <p>Booking nudge (green) · clarifier (yellow) · stop (red). Per-lead Cal link.</p>
+      <span class="chip"><span class="d"></span>InsForge AI gateway</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node" style="--edge:var(--signal)">
+      <div class="step">08 · BOOK</div><h3>Meeting booked</h3>
+      <p>Booking webhook maps by lead id → lead flips to Booked.</p>
+      <span class="chip"><span class="d"></span>Cal.com</span>
+    </div>
+  </div>
+
+  <!-- FOUNDATION -->
+  <div class="lanelabel"><span class="n">▚</span><h2>Foundation — every stage writes through here</h2></div>
+  <div class="foundation">
+    <div class="found">
+      <span class="chip"><span class="d"></span>InsForge</span>
+      <h3 style="margin-top:11px">Persistence + state machine + AI gateway</h3>
+      <p>Postgres source of truth. A guarded lifecycle state machine; Claude reasoning via the model gateway.</p>
+    </div>
+    <div class="found">
+      <span class="chip"><span class="d"></span>Hydra</span>
+      <h3 style="margin-top:11px">Funnel analytics</h3>
+      <p>Reply rate, response time, green/red ratio — computed from the same store.</p>
+    </div>
+  </div>
+
+  <!-- LIFECYCLE -->
+  <div class="lanelabel"><span class="n">↻</span><h2>Lead lifecycle (the state machine)</h2></div>
+  <div class="ribbon">
+    <span class="st b">DETECTED</span><span class="sep">→</span>
+    <span class="st b">ENRICHED</span><span class="sep">→</span>
+    <span class="st b">DRAFTED</span><span class="sep">→</span>
+    <span class="st">SENT</span><span class="sep">→</span>
+    <span class="st">DELIVERED</span><span class="sep">→</span>
+    <span class="st">REPLIED</span><span class="sep">→</span>
+    <span class="st g">GREEN</span><span class="st y">YELLOW</span><span class="st r">RED</span><span class="sep">→</span>
+    <span class="st">FOLLOW_UP</span><span class="sep">→</span>
+    <span class="st g">BOOKED</span>
+  </div>
+
+  <!-- DATA FLOW -->
+  <div class="lanelabel"><span class="n">⇄</span><h2>How the dashboard gets its data (it's real)</h2></div>
+  <div class="data">
+    <div class="dbox"><div class="t">Dashboard</div><div class="s">polls /api/leads</div></div>
+    <div class="arrow">→</div>
+    <div class="dbox"><div class="t">Next.js API route</div><div class="s">store.listLeads()</div></div>
+    <div class="arrow">→</div>
+    <div class="dbox"><div class="t">InsForge store</div><div class="s">raw SQL over HTTPS</div></div>
+    <div class="arrow">→</div>
+    <div class="dbox db"><div class="t">InsForge Postgres</div><div class="s">leads table · source of truth</div></div>
+  </div>
+  <div class="data" style="margin-top:10px">
+    <div class="dbox src"><div class="t">↑ written by · Workstream B</div><div class="s">EDGAR detect → enrich → draft</div></div>
+    <div class="dbox src"><div class="t">↑ updated by · Workstream D</div><div class="s">send · triage · booking webhooks</div></div>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:var(--signal)"></i>live / real</span>
+    <span><i style="background:var(--amber)"></i>controlled</span>
+    <span><i style="background:var(--blue)"></i>backend</span>
+  </div>
+
+  <footer>
+    <div class="honesty">
+      <b>Honesty by design:</b> real signal, real research, real resolved emails — but
+      <b>no emails to real founders</b> (sends route only to 3 controlled inboxes), no LinkedIn
+      automation, and every triage is tagged <span style="font-family:var(--mono)">llm</span>/<span style="font-family:var(--mono)">mock</span> so we never fake AI on screen.
+    </div>
+    <a href="https://frontrun-self.vercel.app">frontrun-self.vercel.app ↗</a>
+  </footer>
+
+</div>
+</body>
+</html>
