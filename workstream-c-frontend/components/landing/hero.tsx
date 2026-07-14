@@ -9,7 +9,9 @@ import {
   useTransform,
 } from "framer-motion"
 import { ArrowRight } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Wordmark } from "@/components/frontrun/signature"
+import { CountUp } from "./count-up"
 
 const EASE_SIGNAL = [0.2, 0, 0, 1] as const
 
@@ -73,17 +75,11 @@ export function Hero() {
       </div>
 
       {/* Top strip */}
-      <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
-        <Wordmark showDescriptor={false} />
-        <Link
-          href="/"
-          className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-subtle transition-colors duration-[var(--dur-fast)] hover:text-fg"
-        >
-          Open dashboard →
-        </Link>
+      <div className="relative mx-auto flex w-full max-w-6xl items-center px-6 py-6">
+        <Wordmark showDescriptor={false} size="lg" />
       </div>
 
-      <div className="relative mx-auto grid w-full max-w-6xl gap-14 px-6 pb-28 pt-20 md:grid-cols-[1.15fr_auto] md:gap-20 md:pb-40 md:pt-28">
+      <div className="relative mx-auto grid w-full max-w-6xl gap-14 px-6 pb-28 pt-20 md:grid-cols-[1.35fr_auto] md:gap-20 md:pb-40 md:pt-28">
         {/* Headline block */}
         <motion.div style={{ y: contentY, opacity: contentOpacity }}>
           <motion.p className="kicker flex items-center gap-2" {...enter(0)}>
@@ -96,15 +92,31 @@ export function Hero() {
             01 / Autonomous SDR
           </motion.p>
 
-          <motion.h1
-            className="mt-6 font-display text-[2.75rem] font-semibold leading-[1.0] tracking-tight text-fg sm:text-6xl md:text-[5.25rem]"
-            {...enter(0.08)}
-          >
-            By the time the press
-            <br />
-            releases,{" "}
-            <span className="text-fg-subtle">it&apos;s too late.</span>
-          </motion.h1>
+          <h1 className="mt-6 font-display text-[2rem] font-semibold leading-[1.03] tracking-tight text-fg sm:text-5xl md:text-6xl lg:text-7xl">
+            {[
+              { t: "By the time the", dim: false },
+              { t: "press releases,", dim: false },
+              { t: "it’s too late.", dim: true },
+            ].map((line, i) => (
+              <span key={line.t} className="block overflow-hidden pb-[0.1em]">
+                <motion.span
+                  className={cn(
+                    "block whitespace-nowrap",
+                    line.dim && "text-fg-subtle",
+                  )}
+                  initial={reduce ? {} : { y: "115%" }}
+                  animate={reduce ? {} : { y: 0 }}
+                  transition={{
+                    duration: 0.85,
+                    delay: 0.12 + i * 0.13,
+                    ease: EASE_SIGNAL,
+                  }}
+                >
+                  {line.t}
+                </motion.span>
+              </span>
+            ))}
+          </h1>
 
           <motion.p
             className="mt-8 max-w-lg text-base leading-relaxed text-fg-muted md:text-lg"
@@ -127,6 +139,27 @@ export function Hero() {
             <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg-faint">
               Reach them first.
             </span>
+          </motion.div>
+
+          {/* Animated stat band */}
+          <motion.div
+            className="mt-12 flex flex-wrap gap-x-10 gap-y-5 border-t border-line pt-7"
+            {...enter(0.42)}
+          >
+            {[
+              { v: <CountUp to={9} suffix=" days" />, l: "before the press release" },
+              { v: <CountUp to={20} suffix="+" />, l: "roles to fill per raise" },
+              { v: <CountUp to={7} />, l: "stages · zero hand-offs" },
+            ].map((s) => (
+              <div key={s.l}>
+                <div className="font-display text-2xl font-semibold tracking-tight text-fg md:text-3xl">
+                  {s.v}
+                </div>
+                <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-fg-subtle">
+                  {s.l}
+                </div>
+              </div>
+            ))}
           </motion.div>
         </motion.div>
 
