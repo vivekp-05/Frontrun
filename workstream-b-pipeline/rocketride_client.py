@@ -32,7 +32,7 @@ from typing import Any
 from rocketride import RocketRideClient
 from rocketride.schema import Question
 
-DEFAULT_PIPELINE = Path(__file__).resolve().parent / "frontrun.pipe"
+DEFAULT_PIPELINE = Path(__file__).resolve().parent / "enrich.pipe"
 
 # LLM node env vars RocketRide substitutes into the pipe (any one enables output).
 LLM_KEY_VARS = ("ROCKETRIDE_OPENAI_KEY", "ROCKETRIDE_ANTHROPIC_KEY", "ROCKETRIDE_GEMINI_KEY")
@@ -82,28 +82,50 @@ async def run_rocketride(args: argparse.Namespace) -> dict[str, Any]:
         used = await client.use(filepath=str(args.pipeline), ttl=180, env=llm_env or None)
         token = used["token"]
 
-        # 3) Ask the drafting agent via chat() — this routes the lead into the
-        #    'questions' lane and returns the agent's answers[] (the drafted email).
+        # 3) Run the enrichment agent via chat() — routes the lead into the
+        #    'questions' lane; the agent (with http_request + LLM) resolves the
+        #    real domain/email, researches funding, and drafts outreach.
         question = Question(expectJson=True)
-        question.addContext(f"Newly funded company from an SEC Form D filing: {lead}")
+        question.addContext(f"Company that filed an SEC Form D (raised private capital): {lead}")
         question.addQuestion(
-            'Write ONE concise, warm first-touch recruiting outreach email offering '
-            'fast technical recruiting help. Return JSON {"subject":"...","body":"..."}.'
+            "Enrich this lead end to end. Resolve the company's REAL website domain and the "
+            "exec's professional email at it, write a short funding/company research summary, "
+            'and draft ONE warm first-touch recruiting outreach email. Return STRICT JSON: '
+            '{"domain":"...","email":"...","emailConfidence":"high|medium|low","research":"...",'
+            '"draft":{"subject":"...","body":"..."}}.'
         )
         response = await client.chat(token=token, question=question)
         answers = response.get("answers") if isinstance(response, dict) else None
 
         await client.terminate(token)
 
-    draft = answers[0] if answers else None
+    raw = answers[0] if answers else None
+    enrichment = raw if isinstance(raw, dict) else _try_json(raw)
     return {
         "connected": True,
         "validated": bool(validation),
         "token": token,
         "llm_key_present": have_llm_key,
-        "draft": draft,
+        "enrichment": enrichment,
+        "raw": None if enrichment else raw,
         "objectId": response.get("objectId") if isinstance(response, dict) else None,
     }
+
+
+def _try_json(s: Any) -> Any:
+    if not isinstance(s, str):
+        return None
+    try:
+        import ast
+        t = s.strip()
+        if t.startswith("```"):
+            t = t.strip("`").split("\n", 1)[-1]
+        return json.loads(t)
+    except Exception:
+        try:
+            return ast.literal_eval(s)
+        except Exception:
+            return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -127,13 +149,18 @@ async def main() -> None:
     if not result["llm_key_present"]:
         print(
             "\nℹ RocketRide connected, validated, and deployed the pipeline, but no LLM key is set,\n"
-            "  so the drafting agent produced no text. Add ONE of "
+            "  so the enrichment agent produced no output. Add ONE of "
             + ", ".join(LLM_KEY_VARS)
-            + " (an sk-... key)\n  to .env.local for a live draft. The rr_ key authenticates orchestration only (BYOK inference).",
+            + " (an sk-... key)\n  to .env.local. The rr_ key authenticates orchestration only (BYOK inference).",
             file=sys.stderr,
         )
-    elif result["draft"]:
-        print("\n✓ RocketRide Cloud drafted the outreach email live (agent_rocketride + OpenAI).", file=sys.stderr)
+    elif result.get("enrichment"):
+        e = result["enrichment"]
+        print(
+            f"\n✓ RocketRide Cloud enriched the lead live (agent_rocketride + http_request + OpenAI): "
+            f"domain={e.get('domain')} email={e.get('email')} ({e.get('emailConfidence')}).",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,54 @@
+{
+  "components": [
+    {
+      "id": "webhook_1",
+      "provider": "webhook",
+      "config": { "hideForm": true, "mode": "Source", "parameters": {}, "type": "webhook" },
+      "ui": { "position": { "x": 20, "y": 200 }, "measured": { "width": 150, "height": 66 }, "nodeType": "default", "formDataValid": true }
+    },
+    {
+      "id": "agent_rocketride_1",
+      "provider": "agent_rocketride",
+      "config": {
+        "instructions": [
+          "You are the enrichment agent for Frontrun, an autonomous SDR for a technical-recruiting agency. You are given a company that just filed an SEC Form D (raised private capital) plus its named exec/director from the filing. Enrich it end to end: (1) determine the company's REAL primary website domain (use the http_request tool to confirm the domain resolves if unsure — do NOT invent a domain); (2) produce the exec's most likely professional email at that domain (first.last@domain convention); (3) write a 2-3 sentence funding/company research summary; (4) draft ONE concise, warm first-touch recruiting outreach email. Never fabricate facts about the person. Return STRICT JSON only: {\"domain\":\"...\",\"email\":\"...\",\"emailConfidence\":\"high|medium|low\",\"research\":\"...\",\"draft\":{\"subject\":\"...\",\"body\":\"...\"}}"
+        ],
+        "max_waves": 6,
+        "parameters": {}
+      },
+      "input": [{ "lane": "questions", "from": "webhook_1" }],
+      "ui": { "position": { "x": 240, "y": 200 }, "measured": { "width": 150, "height": 86 }, "nodeType": "default", "formDataValid": true }
+    },
+    {
+      "id": "llm_openai_1",
+      "provider": "llm_openai",
+      "config": { "profile": "openai-4o", "openai-4o": { "apikey": "${ROCKETRIDE_OPENAI_KEY}" }, "parameters": {} },
+      "control": [{ "classType": "llm", "from": "agent_rocketride_1" }],
+      "ui": { "position": { "x": 130, "y": 360 }, "measured": { "width": 150, "height": 66 }, "nodeType": "default", "formDataValid": true }
+    },
+    {
+      "id": "memory_internal_1",
+      "provider": "memory_internal",
+      "config": { "type": "memory_internal" },
+      "control": [{ "classType": "memory", "from": "agent_rocketride_1" }],
+      "ui": { "position": { "x": 350, "y": 360 }, "measured": { "width": 150, "height": 66 }, "nodeType": "default", "formDataValid": true }
+    },
+    {
+      "id": "tool_http_request_1",
+      "provider": "tool_http_request",
+      "config": { "type": "tool_http_request" },
+      "control": [{ "classType": "tool", "from": "agent_rocketride_1" }],
+      "ui": { "position": { "x": 570, "y": 360 }, "measured": { "width": 150, "height": 40 }, "nodeType": "default", "formDataValid": true }
+    },
+    {
+      "id": "response_answers_1",
+      "provider": "response_answers",
+      "config": { "laneName": "answers" },
+      "input": [{ "lane": "answers", "from": "agent_rocketride_1" }],
+      "ui": { "position": { "x": 460, "y": 200 }, "measured": { "width": 150, "height": 66 }, "nodeType": "default", "formDataValid": true }
+    }
+  ],
+  "project_id": "d70a1411-1a1d-4efc-a108-5a3f1598b870",
+  "viewport": { "x": 0, "y": 0, "zoom": 1 },
+  "version": 1
+}
