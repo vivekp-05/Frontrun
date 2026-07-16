@@ -23,8 +23,10 @@ Five API routes back the dashboard (all `runtime="nodejs"`, `dynamic="force-dyna
 | `POST /api/webhooks/resend`  | delivery + inbound-reply → Band triage → state machine | Resend webhook secret |
 | `POST /api/webhooks/calcom`  | BOOKING_CREATED → lead BOOKED | Cal.com webhook secret |
 
-Graceful degradation: every route returns 200 with a safe fallback if its keys are missing,
-so a deploy never hard-fails on absent env.
+Graceful degradation: dashboard/outreach routes return 200 with a safe fallback if their
+keys are missing. **Exception: the two webhook routes fail CLOSED** — deployed with no
+signing secret they return 503 for every POST (never process unverified events), so both
+webhook secrets below are merge prerequisites for the live reply loop.
 
 ## Verified before handoff
 
@@ -67,7 +69,7 @@ Legend: ✅ value in repo-root `.env.local` · ⚠️ needed for full loop, not 
 | `RESEND_API_KEY`    | ✅ | unset ⇒ mock send |
 | `RESEND_FROM_EMAIL` | ✅ | branded verified sender |
 | `RESEND_REPLY_TO`   | ✅ | managed inbox where replies land |
-| `RESEND_WEBHOOK_SECRET` | ⚠️ | Svix signing secret (`whsec_…`) from Resend webhook UI. Unset ⇒ route **dev-bypasses** signature check (works, but unverified). Set for production. Obtainable only after the URL exists. |
+| `RESEND_WEBHOOK_SECRET` | ⚠️ | Svix signing secret (`whsec_…`) from Resend webhook UI. **REQUIRED on the deploy**: unset ⇒ the route fails CLOSED (503, no event processed — leads freeze at SENT and Resend/Svix may auto-disable the endpoint after sustained failures). Obtainable only after the URL exists, so set it (prod AND preview) immediately after wiring the webhook. |
 
 ### Band (reply triage — D, read via `BAND_AGENT_${ROLE}_{ID,HANDLE,KEY}`)
 | Var | Status | Notes |
@@ -84,7 +86,7 @@ Legend: ✅ value in repo-root `.env.local` · ⚠️ needed for full loop, not 
 | Var | Status | Notes |
 |---|---|---|
 | `CALCOM_LINK`           | ⚠️ | base booking URL, e.g. `https://cal.com/you/intro`. Without it, GREEN replies get no booking link. |
-| `CALCOM_WEBHOOK_SECRET` | ⚠️ | HMAC secret set on the Cal.com webhook. Verifies BOOKING_CREATED. |
+| `CALCOM_WEBHOOK_SECRET` | ⚠️ | HMAC secret set on the Cal.com webhook. Verifies BOOKING_CREATED. **REQUIRED on the deploy**: unset ⇒ the route fails CLOSED (503) and bookings never flip leads to BOOKED. |
 | `CALCOM_API_KEY`        | n/a | **do NOT set** — not read by runtime |
 
 ### Sender identity / model / mock toggles (all optional)
@@ -95,6 +97,10 @@ Legend: ✅ value in repo-root `.env.local` · ⚠️ needed for full loop, not 
 | `MOCK_SEND`, `MOCK_TRIAGE`, `MOCK_LLM` | **leave unset** for the real demo (set `=1` only to force mocks) |
 
 ## Post-deploy webhook wiring (needs the live URL first)
+
+> ⚠️ Until both steps below land the secrets on Vercel, every webhook POST answers 503
+> (fail closed — nothing is processed) and leads stay frozen at SENT. Do these with the
+> merge, not "later": the known `frontrun` prod env has NEITHER secret set yet.
 
 1. **Resend** → Webhooks → add endpoint `https://<deployment>/api/webhooks/resend`,
    subscribe to delivery + inbound events → copy the signing secret → set

@@ -95,9 +95,14 @@ export interface EmailDraft {
   subject: string
   body: string
   createdAt: string // ISO 8601
+  /** How the draft was produced — surfaced so we never fake "AI" on screen (PRD §10). */
+  via?: "llm" | "template"
 }
 
-/** Lead prioritization score (workstream B · RocketRide pipeline). */
+/**
+ * Lead prioritization score (workstream B · RocketRide pipeline).
+ * Advisory only — not part of the state machine.
+ */
 export interface LeadScore {
   /** 0–100 recruiting-agency fit. */
   score: number
@@ -120,14 +125,6 @@ export interface ReplyEvent {
   via?: "llm" | "mock"
   /** One line of why, for the UI reasoning drawer. */
   reasoning?: string
-}
-
-/** Lead-quality score (workstream B). Advisory only — not part of the state machine. */
-export interface LeadScore {
-  score: number // 0–100
-  tier: "hot" | "warm" | "cold"
-  reasons: string[]
-  createdAt: string // ISO 8601
 }
 
 /** Outreach delivery telemetry (Resend webhooks, workstream D). */

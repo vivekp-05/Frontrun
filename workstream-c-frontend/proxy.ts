@@ -9,6 +9,12 @@ import { NextResponse, type NextRequest } from "next/server"
  *  - unauthed deep dashboard link    → /gate    (enter the access key)
  *  - unauthed /api/* (except access) → 401 JSON  (data isn't scrapable either)
  *
+ * Exception: /api/webhooks/* is public. Resend and Cal.com POST there without our
+ * cookie, so gating them freezes every lead at SENT. Safe to expose: each webhook
+ * route authenticates itself by verifying the provider's signature (Svix /
+ * x-cal-signature-256) over the raw body inside the handler — forged or unsigned
+ * calls are rejected there, and the routes never return dashboard data.
+ *
  * Fails CLOSED: if no key is configured, nothing unlocks.
  */
 
@@ -23,8 +29,13 @@ function isAuthed(req: NextRequest): boolean {
 export function proxy(req: NextRequest): NextResponse {
   const { pathname } = req.nextUrl
 
-  // Always public: the access API + the two public pages.
-  if (pathname.startsWith("/api/access") || PUBLIC_PAGES.has(pathname)) {
+  // Always public: the access API, provider webhooks (self-authenticating via
+  // signature verification in their handlers), and the two public pages.
+  if (
+    pathname.startsWith("/api/access") ||
+    pathname.startsWith("/api/webhooks/") ||
+    PUBLIC_PAGES.has(pathname)
+  ) {
     return NextResponse.next()
   }
 

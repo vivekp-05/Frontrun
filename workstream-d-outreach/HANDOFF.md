@@ -252,7 +252,11 @@ Stored in `.env.local` (gitignored, never commit). **Set:** `INSFORGE_PROJECT_UR
    `(Request)=>Response` handlers (drop into Next.js `app/api/webhooks/{resend,calcom}/
    route.ts` with `export const runtime = "nodejs"`). Verify signature (Resend=Svix,
    Cal.com=HMAC) over the raw body → parse → dispatch → 200/400/401/500. Dev-bypass
-   when no secret set. Covered by `routes.test.ts` (in `test:d`). **Remaining:** C/A
+   when no secret set applies to **local dev only** (NODE_ENV development/test/unset);
+   any deployed env fails CLOSED with 503 — so `RESEND_WEBHOOK_SECRET` and
+   `CALCOM_WEBHOOK_SECRET` MUST be set on the deploy (Vercel prod AND preview both
+   run NODE_ENV=production) or every webhook 503s and leads freeze at SENT.
+   Covered by `routes.test.ts` (in `test:d`). **Remaining:** C/A
    create the two `route.ts` files wiring in A's store + `bandTriageRunner()`.
 3. **Resend domain + inbound** — ✅ LIVE-verified (2026-07-13):
    - Sending: `vivek-patel.xyz` verified; `RESEND_FROM_EMAIL=dana@vivek-patel.xyz`.

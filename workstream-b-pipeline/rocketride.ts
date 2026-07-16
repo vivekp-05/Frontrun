@@ -93,7 +93,7 @@ export async function runRocketRidePipeline(
     steps.push("score_patched")
   }
 
-  const drafted = draftOutreach(current)
+  const drafted = await draftOutreach(current)
   steps.push("drafted")
   current = drafted
   if (persist && store) {

@@ -80,10 +80,10 @@ DETECTED is never clobbered (the run returns it with a `resumed` step).
 
 ## RocketRide
 
-The outreach-**draft** step runs as a native RocketRide Cloud pipeline
-(`frontrun.pipe`): `webhook → agent_rocketride (+ llm + memory) → response_answers`.
-Enrich/verify stay in the TS pipeline (HTTP/API calls); RocketRide orchestrates
-the drafting agent. Verified live against `https://api.rocketride.ai` — the `rr_`
+The **enrich → draft** step runs as a native RocketRide Cloud pipeline
+(`enrich.pipe`): `webhook → agent_rocketride (+ llm + memory + http_request) → response_answers`.
+The agent resolves the company's real domain/email, researches the raise, and
+drafts the outreach. Verified live against `https://api.rocketride.ai` — the `rr_`
 key connects, `validate()` passes, and the pipe deploys.
 
 ```bash
@@ -93,9 +93,9 @@ set -a; source .env.local; set +a
 ROCKETRIDE_OPENAI_KEY=sk-... npm run track-b:rocketride
 ```
 
-`rocketride_client.py` connects with `ROCKETRIDE_AUTH`, validates `frontrun.pipe`,
+`rocketride_client.py` connects with `ROCKETRIDE_AUTH`, validates `enrich.pipe`,
 deploys it, sends a lead summary, and prints `{ connected, validated, token,
-llm_key_present, draft }`.
+llm_key_present, enrichment }`.
 
 > **BYOK inference.** The `rr_` key authenticates orchestration only. The agent's
 > LLM node needs one provider key — `ROCKETRIDE_OPENAI_KEY` (an `sk-...` key), or

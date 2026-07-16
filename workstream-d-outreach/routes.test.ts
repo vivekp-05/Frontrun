@@ -3,7 +3,8 @@
  * ----------------------------------------------------------------
  * Proves the HTTP glue: a correctly-signed Resend/Cal.com request verifies,
  * parses, dispatches, and drives the state machine; a tampered or unsigned
- * request is rejected 401; a bad body is 400; and the dev bypass (no secret) works.
+ * request is rejected 401; a bad body is 400; the dev bypass (no secret) works
+ * in local dev only; and any non-local env with no secret fails CLOSED (503).
  *
  * Run:  npx tsx workstream-d-outreach/routes.test.ts   (no keys, no network)
  */
@@ -62,6 +63,18 @@ function signCal(body: string, tamper = false) {
 
 function req(body: string, headers: Record<string, string>): Request {
   return new Request("https://frontrun.test/api/webhooks", { method: "POST", headers, body })
+}
+
+/** Run a case under a specific NODE_ENV, always restoring the original after. */
+async function inNodeEnv(nodeEnv: string, fn: () => Promise<void>) {
+  const prev = process.env.NODE_ENV
+  process.env.NODE_ENV = nodeEnv
+  try {
+    await fn()
+  } finally {
+    if (prev === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = prev
+  }
 }
 
 // --- Cases ------------------------------------------------------------------
@@ -166,15 +179,72 @@ async function main() {
     check("inbound fetch: raw reply text = fetched body", (l?.replies?.[0]?.rawText ?? "").includes("let's talk"))
   }
 
-  // 7) Dev bypass — no secret configured → verification passes.
+  const nodeEnvBefore = process.env.NODE_ENV
+
+  // 7) Dev bypass — no secret configured, NON-production → verification passes.
   {
-    const store = new MemStore()
-    await store.upsertLead(leadAt(LeadStatus.SENT))
-    const route = createResendRoute({ store }, { secret: undefined })
-    const body = JSON.stringify({ type: "email.delivered", data: { tags: [{ name: "lead_id", value: "lead_demo_1" }] } })
-    const res = await route(req(body, { "content-type": "application/json" }))
-    check("dev bypass: 200 without signature", res.status === 200, String(res.status))
+    await inNodeEnv("development", async () => {
+      const store = new MemStore()
+      await store.upsertLead(leadAt(LeadStatus.SENT))
+      const route = createResendRoute({ store }, { secret: undefined })
+      const body = JSON.stringify({ type: "email.delivered", data: { tags: [{ name: "lead_id", value: "lead_demo_1" }] } })
+      const res = await route(req(body, { "content-type": "application/json" }))
+      check("dev bypass: 200 without signature", res.status === 200, String(res.status))
+    })
   }
+
+  // 8) Production + missing secret → fail CLOSED (503), store untouched.
+  {
+    await inNodeEnv("production", async () => {
+      const store = new MemStore()
+      await store.upsertLead(leadAt(LeadStatus.SENT))
+      const resendRoute = createResendRoute({ store }, { secret: undefined })
+      const resendBody = JSON.stringify({ type: "email.delivered", data: { tags: [{ name: "lead_id", value: "lead_demo_1" }] } })
+      const resendRes = await resendRoute(req(resendBody, signResend(resendBody)))
+      const resendOut = await resendRes.json()
+      check("prod no-secret resend: 503", resendRes.status === 503, String(resendRes.status))
+      check("prod no-secret resend: names the env var", String(resendOut.error).includes("RESEND_WEBHOOK_SECRET"), resendOut.error)
+      check("prod no-secret resend: lead untouched (still SENT)", (await store.getLead("lead_demo_1"))?.status === LeadStatus.SENT)
+
+      const calRoute = createCalcomRoute({ store }, { secret: undefined })
+      const calBody = JSON.stringify({ triggerEvent: "BOOKING_CREATED", payload: { metadata: { leadId: "lead_demo_1" } } })
+      const calRes = await calRoute(req(calBody, signCal(calBody)))
+      const calOut = await calRes.json()
+      check("prod no-secret calcom: 503", calRes.status === 503, String(calRes.status))
+      check("prod no-secret calcom: names the env var", String(calOut.error).includes("CALCOM_WEBHOOK_SECRET"), calOut.error)
+      check("prod no-secret calcom: lead untouched (still SENT)", (await store.getLead("lead_demo_1"))?.status === LeadStatus.SENT)
+    })
+  }
+
+  // 8b) Fail-closed is not keyed on "production" exactly — any non-local
+  //     NODE_ENV (e.g. staging on a public host) + missing secret → 503 too.
+  {
+    await inNodeEnv("staging", async () => {
+      const store = new MemStore()
+      await store.upsertLead(leadAt(LeadStatus.SENT))
+      const route = createResendRoute({ store }, { secret: undefined })
+      const body = JSON.stringify({ type: "email.delivered", data: { tags: [{ name: "lead_id", value: "lead_demo_1" }] } })
+      const res = await route(req(body, { "content-type": "application/json" }))
+      check("staging no-secret resend: 503", res.status === 503, String(res.status))
+      check("staging no-secret resend: lead untouched (still SENT)", (await store.getLead("lead_demo_1"))?.status === LeadStatus.SENT)
+    })
+  }
+
+  // 9) Production + secret + valid signature → processed normally.
+  {
+    await inNodeEnv("production", async () => {
+      const store = new MemStore()
+      await store.upsertLead(leadAt(LeadStatus.SENT))
+      const route = createResendRoute({ store }, { secret: RESEND_SECRET })
+      const body = JSON.stringify({ type: "email.delivered", data: { tags: [{ name: "lead_id", value: "lead_demo_1" }] } })
+      const res = await route(req(body, signResend(body)))
+      const out = await res.json()
+      check("prod signed resend: 200", res.status === 200, String(res.status))
+      check("prod signed resend: action", out.action === "delivered", out.action)
+      check("prod signed resend: lead DELIVERED", (await store.getLead("lead_demo_1"))?.status === LeadStatus.DELIVERED)
+    })
+  }
+  check("NODE_ENV restored after env-scoped cases", process.env.NODE_ENV === nodeEnvBefore, String(process.env.NODE_ENV))
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`)
   if (failures > 0) process.exit(1)
