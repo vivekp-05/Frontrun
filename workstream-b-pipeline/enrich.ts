@@ -12,17 +12,16 @@ import { confirmFunding, YouResearchProvider } from "./confirm"
 import { PipelineEnv, readPipelineEnv } from "./env"
 import { CompositeCompanyScrapeProvider, FirecrawlCompanyScrapeProvider } from "./scrapeCompany"
 
-interface NimbleContactResult {
-  name?: string
+interface NimbleSearchResult {
   title?: string
-  email?: string
-  linkedinUrl?: string
-  linkedin_url?: string
+  description?: string
+  url?: string
+  content?: string
 }
 
 interface NimbleResponse {
-  contacts?: NimbleContactResult[]
-  results?: NimbleContactResult[]
+  results?: NimbleSearchResult[]
+  total_results?: number
 }
 
 export interface EnrichmentResult {
@@ -44,8 +43,10 @@ export class NimbleScrapeProvider implements ScrapeProvider {
       return []
     }
 
-    const baseUrl = this.env.NIMBLE_API_BASE_URL ?? "https://api.webit.live/api/v1/realtime/web"
-    const response = await fetch(baseUrl, {
+    // Current Nimble Web API search (docs.nimbleway.com) — the old
+    // api.webit.live/api/v1/realtime/web endpoint is legacy.
+    const baseUrl = this.env.NIMBLE_API_BASE_URL ?? "https://sdk.nimbleway.com"
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/search`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.env.NIMBLE_API_KEY}`,
@@ -54,6 +55,8 @@ export class NimbleScrapeProvider implements ScrapeProvider {
       },
       body: JSON.stringify({
         query: domain ? `${companyName} ${domain} founder email` : `${companyName} founder email`,
+        max_results: 5,
+        search_depth: "deep", // populates results[].content, where emails actually live
       }),
     })
 
@@ -62,16 +65,33 @@ export class NimbleScrapeProvider implements ScrapeProvider {
     }
 
     const payload = (await response.json()) as NimbleResponse
-    const contacts = payload.contacts ?? payload.results ?? []
+    const results = payload.results ?? []
 
-    return contacts.map((contact) => ({
-      name: contact.name,
-      title: contact.title,
-      email: contact.email,
-      linkedinUrl: contact.linkedinUrl ?? contact.linkedin_url,
-      emailConfidence: contact.email ? "unverified" : "low",
-      source: "nimble",
-    }))
+    // Search results carry no structured contacts — extract only what is
+    // really there (email, LinkedIn profile). Name/title fall back to the
+    // real Form D exec/director downstream; nothing is fabricated (PRD §14).
+    // Snippet text is untrusted (anything can rank for "<company> founder
+    // email"), so an email only counts when it is on the company's own
+    // domain — never a stray third-party address. No known domain → no email.
+    const emailDomain = normalizeDomain(domain)
+    return results.flatMap((result) => {
+      const text = [result.title, result.description, result.content, result.url].filter(Boolean).join("\n")
+      const emails = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? []
+      const email = emailDomain
+        ? emails.find((item) => item.toLowerCase().endsWith(`@${emailDomain}`))
+        : undefined
+      const linkedinUrl = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[^\s)"']+/i)?.[0]
+      if (!email && !linkedinUrl) return []
+
+      return [
+        {
+          email,
+          linkedinUrl,
+          emailConfidence: email ? "unverified" : "low",
+          source: "nimble",
+        },
+      ]
+    })
   }
 }
 
@@ -209,7 +229,9 @@ function selectBestContact(lead: Lead, candidates: Partial<Contact>[]): Contact 
     title: candidate?.title ?? person.title ?? "Founder / Executive",
     email: candidate?.email,
     emailConfidence: candidate?.emailConfidence ?? "unverified",
-    linkedinUrl: candidate?.linkedinUrl,
+    // A LinkedIn-only candidate (no name/email) can never win selection above,
+    // but its profile URL is still real, found signal — carry it through.
+    linkedinUrl: candidate?.linkedinUrl ?? candidates.find((item) => item.linkedinUrl)?.linkedinUrl,
     source: candidate?.source ?? "manual",
   }
 }
@@ -237,4 +259,15 @@ function patternEmail(name: string, domain: string): string | undefined {
 
 function inferDomain(companyName: string): string {
   return `${companyName.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 28) || "company"}.com`
+}
+
+/** Lowercased bare host from a domain or URL ("https://www.Acme.ai/x" → "acme.ai"). */
+function normalizeDomain(domain?: string): string | undefined {
+  if (!domain) return undefined
+  const host = domain
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split(/[/?#]/)[0]
+    .replace(/^www\./, "")
+  return host || undefined
 }

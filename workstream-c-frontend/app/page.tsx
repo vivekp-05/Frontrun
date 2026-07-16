@@ -116,7 +116,7 @@ export default function Page() {
       <p className="font-mono text-[11px] text-fg-faint">
         {live
           ? "Live · Track A backend on InsForge · polling /api/leads. Outreach, triage & booking run for real."
-          : "Mock data · no backend · transitions simulated client-side. Swaps to Track A’s status API at checkpoint 1."}
+          : "Placeholder data · polling /api/leads until Track A’s backend answers. Nothing is simulated — the feed goes live on the first successful poll."}
       </p>
     </div>
   )

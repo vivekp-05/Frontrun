@@ -19,6 +19,7 @@
  * Status contract (what webhook providers expect):
  *   200 accepted (incl. "unmatched"/"ignored" — a valid event we chose to no-op)
  *   400 unparseable body     401 bad/missing signature     500 handler threw (retry)
+ *   503 no signing secret outside local dev (fail closed; provider retries)
  */
 
 import {
@@ -50,6 +51,25 @@ function json(body: unknown, status: number): Response {
     status,
     headers: { "content-type": "application/json" },
   })
+}
+
+/**
+ * Fail CLOSED when no signing secret is configured: the webhook routes are
+ * publicly reachable on a deploy (proxy.ts exempts /api/webhooks/*), and the
+ * no-secret dev bypass in signatures.ts would let anyone forge lifecycle
+ * events. Only explicit local envs keep the bypass — NODE_ENV "development",
+ * "test", or unset (bare tsx scripts) — so local testing works without keys;
+ * anything else ("production", "staging", …) fails closed. Checked per-request
+ * so tests (and redeploys) see the current NODE_ENV.
+ */
+function guardMissingSecret(secret: string | undefined, envVar: string): Response | undefined {
+  const nodeEnv = env("NODE_ENV")
+  const isLocal = nodeEnv === undefined || nodeEnv === "development" || nodeEnv === "test"
+  if (secret || isLocal) return undefined
+  return json(
+    { ok: false, error: `${envVar} is not configured — refusing unverified webhooks outside local dev` },
+    503,
+  )
 }
 
 /** Shared skeleton: verify → parse → dispatch → map to a Response. */
@@ -89,7 +109,8 @@ export function createResendRoute(
   // arrive as metadata-only email.received events) get their body pulled + triaged.
   const fetchInbound = deps.fetchInbound ?? createResendInboundFetcher()
   const withFetch: WebhookDeps = { ...deps, fetchInbound }
-  return (req) =>
+  return async (req) =>
+    guardMissingSecret(secret, "RESEND_WEBHOOK_SECRET") ??
     runRoute(
       req,
       (raw, headers) => verifyResendSignature(raw, headers, secret),
@@ -103,7 +124,8 @@ export function createCalcomRoute(
   opts: RouteOptions = {},
 ): FetchRoute {
   const secret = opts.secret ?? env("CALCOM_WEBHOOK_SECRET")
-  return (req) =>
+  return async (req) =>
+    guardMissingSecret(secret, "CALCOM_WEBHOOK_SECRET") ??
     runRoute(
       req,
       (raw, headers) => verifyCalcomSignature(raw, headers, secret),

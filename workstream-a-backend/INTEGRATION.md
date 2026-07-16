@@ -75,6 +75,6 @@ await store.transition(lead.id, LeadStatus.ENRICHED);
 
 ## Shared InsForge note
 
-You and A point at the **same InsForge project** (`INSFORGE_PROJECT_URL` + `INSFORGE_API_KEY` = the `ik_` project key).
+You and A point at the **same InsForge project** (`INSFORGE_PROJECT_URL` + `INSFORGE_API_KEY` = the project API key from the InsForge dashboard; prefix varies, e.g. `ik_…`/`uak_…`).
 A has already run `npm run db:init`, so the `leads` table exists. Your writes appear in A's store and the frontend immediately.
 Analytics (funnel) are computed by A from that table — Hydra is optional (it's a context/vector store, not a SQL analytics DB).

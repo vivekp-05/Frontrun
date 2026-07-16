@@ -53,7 +53,7 @@ npm run db:init            # add :seed to also load the 6 seed leads → npm run
 npm start
 ```
 
-- `INSFORGE_PROJECT_URL` = your project base (e.g. `https://<app>.<region>.insforge.app`); `INSFORGE_API_KEY` = the **project API key** (`uak_…`, server-only — never a `NEXT_PUBLIC_` var).
+- `INSFORGE_PROJECT_URL` = your project base (e.g. `https://<app>.<region>.insforge.app`); `INSFORGE_API_KEY` = the **project API key** from the InsForge dashboard (prefix varies, e.g. `ik_…`/`uak_…`; server-only — never a `NEXT_PUBLIC_` var).
 - The adapter talks to InsForge's raw-SQL endpoint (`POST /api/database/advance/rawsql`) with parameterized `INSERT … ON CONFLICT` upserts, so persistence is exact and idempotent. `npm run db:init` pings first and fails loudly if the URL/key is wrong.
 - **Analytics:** computed in InsForge Postgres (funnel `GROUP BY`), not Hydra — research found Hydra DB is a context/vector store, not a SQL analytics DB (its only count primitive is object-count telemetry). `FunnelAnalytics` shape is unchanged either way; Hydra can mirror later without touching callers.
 

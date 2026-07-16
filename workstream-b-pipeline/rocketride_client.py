@@ -1,10 +1,10 @@
 """
 Frontrun — Track B · RocketRide runner (the "one RocketRide tool" prize surface).
 
-Runs the outreach-DRAFT step of Track B as a native RocketRide cloud pipeline
-(`frontrun.pipe`): webhook -> agent_rocketride (+ llm + memory) -> response_answers.
-The enrich/verify steps stay in the TypeScript pipeline (they're HTTP/API calls);
-RocketRide orchestrates the intelligent drafting.
+Runs the enrich->draft step of Track B as a native RocketRide cloud pipeline
+(`enrich.pipe`): webhook -> agent_rocketride (+ llm + memory + http_request)
+-> response_answers. The agent resolves the company's real domain + exec email,
+researches the raise, and drafts the outreach in one deployed pipe.
 
 Auth (verified working):
   ROCKETRIDE_URI   = https://api.rocketride.ai        (Cloud; wss upgrade)

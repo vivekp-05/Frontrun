@@ -70,10 +70,26 @@ export const useFrontrunStore = create<FrontrunState>((set, get) => ({
       // Only re-set when something actually changed — otherwise the poll would
       // replace the array every tick and re-animate the funnel for no reason.
       if (prev.live && signature(prev.leads) === next) return true
+      // Flash the most recently updated lead that changed since the last poll.
+      // Skipped on the first hydration (placeholder → live must not flash).
+      let lastChangedId: string | null = null
+      if (prev.live) {
+        const before = new Map(prev.leads.map((l) => [l.id, l]))
+        const changed = leads.filter((l) => {
+          const old = before.get(l.id)
+          return !old || old.status !== l.status || old.updatedAt !== l.updatedAt
+        })
+        if (changed.length > 0) {
+          lastChangedId = changed.reduce((a, b) =>
+            new Date(b.updatedAt).getTime() > new Date(a.updatedAt).getTime() ? b : a,
+          ).id
+        }
+      }
       set({
         leads,
         live: true,
         detectedToday: leads.length,
+        lastChangedId,
         lastChangedAt: Date.now(),
       })
       return true

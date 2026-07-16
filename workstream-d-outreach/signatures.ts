@@ -10,8 +10,10 @@
  *   Cal.com → header x-cal-signature-256 = HMAC-SHA256(secret, body) as hex.
  *
  * Dev bypass: when no secret is configured, verification passes with a reason
- * (mirrors the codebase's "MOCK when no keys" rule so local testing works). In
- * production the secret is set, so tampered/unsigned calls are rejected.
+ * (mirrors the codebase's "MOCK when no keys" rule so local testing works).
+ * routes.ts never reaches these verifiers secretless outside local dev
+ * (NODE_ENV development/test/unset) — it fails CLOSED (503) everywhere else,
+ * so the bypass can't be triggered by a missing env var on a deploy.
  */
 
 import crypto from "node:crypto"

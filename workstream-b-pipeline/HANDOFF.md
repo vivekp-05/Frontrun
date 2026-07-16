@@ -49,15 +49,19 @@ curl -X POST "$INSFORGE_PROJECT_URL/api/ai/chat/completion" \
 ```
 
 ### You.com — research brief + funding confirmation (needs YDC key)
-- Search: `GET https://ydc-index.io/v1/search?query=…&freshness=month&count=6`, header `X-API-Key: <key>`.
-  Response is **nested**: read `results.web[]` → `{ url, title, description/snippets }` (not a flat `results[]`).
+- Search (the REST fallback in `confirm.ts`): `GET https://api.ydc-index.io/search?query=…`, header `X-API-Key: <key>`
+  (override with `YOU_API_BASE_URL`). Read `results[]` (or `search_results[]`) → `{ url, title, description/snippet }`,
+  plus an optional top-level `answer`.
 - Research: `POST https://api.you.com/v1/research` — **host moved to `api.you.com`**. Header `X-API-Key`, JSON body
   `{ "input": "<question>", "research_effort": "lite|standard|deep|exhaustive" }` — the field is **`input`, not `query`**.
 
 ### Nimble — web + contact enrichment (needs Nimble key)
-- Current: `POST https://sdk.nimbleway.com/v1/extract`, `Authorization: Bearer <key>`.
-- Legacy (still works): `POST https://api.webit.live/api/v1/realtime/web`, Bearer, body
-  `{ url, method:"GET", render:true, country:"US", format:"html" }` → read `data.html_content`.
+- Search (what `NimbleScrapeProvider` calls): `POST https://sdk.nimbleway.com/v1/search`, `Authorization: Bearer <key>`,
+  body `{ query, max_results, search_depth:"deep" }` → read `results[]` → `{ title, description, url, content }`.
+  Override the host with `NIMBLE_API_BASE_URL`.
+- Page extract: `POST https://sdk.nimbleway.com/v1/extract`, Bearer, body `{ url, render, country, formats:["html","markdown"] }`
+  → read `data.html` / `data.markdown`.
+- The old `POST https://api.webit.live/api/v1/realtime/web` realtime endpoint is legacy — don't target it in new code.
 
 ### Hunter + Reoon — email resolve + verify (needs keys; auth is a **query-string** key, not a header)
 - Hunter find: `GET https://api.hunter.io/v2/email-finder?domain=&first_name=&last_name=&api_key=` → `data.email`, `data.score` (0–100).
