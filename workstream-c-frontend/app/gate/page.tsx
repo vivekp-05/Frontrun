@@ -101,11 +101,11 @@ export default function GatePage() {
             </p>
             <div className="mt-3 flex flex-col gap-2.5">
               <a
-                href="mailto:vivekpatel@psu.edu"
+                href="mailto:in.vivekpatel@gmail.com"
                 className="inline-flex items-center gap-2.5 text-sm text-fg-muted transition-colors hover:text-fg"
               >
                 <Mail className="size-4 text-fg-subtle" />
-                vivekpatel@psu.edu
+                in.vivekpatel@gmail.com
               </a>
               <a
                 href="https://vivek-patel.xyz"
